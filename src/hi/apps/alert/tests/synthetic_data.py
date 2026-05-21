@@ -34,7 +34,6 @@ class AlertSyntheticData:
         if not detail_attrs:
             detail_attrs = {'Location': 'Kitchen', 'Sensor': 'Motion-01'}
 
-        source_image_url = '/static/img/hi-icon-196x196.png' if has_image else None
         
         alarm = Alarm(
             alarm_source = alarm_source,
@@ -48,8 +47,8 @@ class AlertSyntheticData:
                     timestamp=timestamp,
                     sensor=None,
                     detail_attrs=detail_attrs,
-                    source_image_url=source_image_url,
-                    has_video_stream=False
+                    has_event_video_snapshot=has_image,
+                    has_event_video_clip=False
                 )
             ],
             security_level = security_level,
@@ -80,7 +79,6 @@ class AlertSyntheticData:
             base_detail_attrs = {'Location': 'Living Room', 'Sensor': 'Motion-02'}
 
         # Create first alarm
-        source_image_url = '/static/img/hi-icon-196x196.png' if has_image else None
         detail_attrs = dict(base_detail_attrs)
         detail_attrs.update({'Count': f'1 of {alarm_count}'})
         
@@ -96,8 +94,8 @@ class AlertSyntheticData:
                     timestamp=reference_datetime,
                     sensor=None,
                     detail_attrs=detail_attrs,
-                    source_image_url=source_image_url,
-                    has_video_stream=False
+                    has_event_video_snapshot=has_image,
+                    has_event_video_clip=False
                 )
             ],
             security_level = security_level,
@@ -124,8 +122,8 @@ class AlertSyntheticData:
                         timestamp=reference_datetime,
                         sensor=None,
                         detail_attrs=detail_attrs,
-                        source_image_url=source_image_url if i == 2 else None,  # Only second alarm has image
-                        has_video_stream=False
+                        has_event_video_snapshot=(has_image and i == 2),  # Only second alarm has image
+                        has_event_video_clip=False
                     ),
                 ],
                 security_level = security_level,
@@ -147,7 +145,6 @@ class AlertSyntheticData:
                                   alarm_level    : AlarmLevel = AlarmLevel.INFO ) -> Alert:
         """Create an event-based alert for testing."""
         
-        source_image_url = '/static/img/hi-icon-196x196.png' if has_image else None
         detail_attrs = {
             'Event': event_name,
             'Location': location,
@@ -168,8 +165,8 @@ class AlertSyntheticData:
                     timestamp=datetimeproxy.now(),
                     sensor=None,
                     detail_attrs=detail_attrs,
-                    source_image_url=source_image_url,
-                    has_video_stream=False
+                    has_event_video_snapshot=has_image,
+                    has_event_video_clip=False
                 )
             ],
             security_level = SecurityLevel.LOW,
@@ -189,7 +186,6 @@ class AlertSyntheticData:
                               has_image        : bool = False ) -> Alert:
         """Create a weather-based alert for testing."""
         
-        source_image_url = '/static/img/hi-icon-196x196.png' if has_image else None
         detail_attrs = {
             'Alert Type': alert_type,
             'Location': location,
@@ -212,8 +208,8 @@ class AlertSyntheticData:
                     timestamp=datetimeproxy.now(),
                     sensor=None,
                     detail_attrs=detail_attrs,
-                    source_image_url=source_image_url,
-                    has_video_stream=False
+                    has_event_video_snapshot=has_image,
+                    has_event_video_clip=False
                 )
             ],
             security_level = SecurityLevel.HIGH,
@@ -284,8 +280,8 @@ class AlertSyntheticData:
                 sensor_response_list = [
                     SensorResponse(integration_key=IntegrationKey("test", "synthetic"), value="active", timestamp=alarm_timestamp, sensor=None, 
                                    detail_attrs={'Notes': f'Details for {alarm_title}. Seed = {seed} '},
-                                   source_image_url='/static/img/hi-icon-196x196.png',
-                                   has_video_stream=False
+                                   has_event_video_snapshot=True,
+                                   has_event_video_clip=False
                                    ),
                 ],
                 security_level = security_level,
@@ -307,8 +303,8 @@ class AlertSyntheticData:
                     sensor_response_list = [
                         SensorResponse(integration_key=IntegrationKey("test", "synthetic"), value="active", timestamp=alarm_timestamp, sensor=None, 
                                        detail_attrs={'Notes': f'Details for {alarm_title}. Seed = {seed} '},
-                                       source_image_url='/static/img/hi-icon-196x196.png',
-                                       has_video_stream=False
+                                       has_event_video_snapshot=True,
+                                       has_event_video_clip=False
                                        ),
                     ],
                     security_level = security_level,

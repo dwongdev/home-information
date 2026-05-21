@@ -19,16 +19,23 @@ from .sensor_history_urls import (
 
 @dataclass
 class SensorResponse:
-    integration_key          : IntegrationKey
-    value                    : str
-    timestamp                : datetime
-    sensor                   : Sensor            = None
-    detail_attrs             : Dict[ str, str ]  = None
-    source_image_url         : str               = None
-    has_video_stream         : bool              = False
-    correlation_role         : Optional[CorrelationRole] = None
-    correlation_id           : Optional[str]     = None
-    sensor_history_id        : int               = None  # Core Django SensorHistory primary key
+    """One sensor reading flowing through the live pipeline.
+
+    ``correlation_id`` pairs the START / END readings of a single
+    upstream event but is SENSOR-SCOPED — uniqueness is guaranteed
+    only within a single Sensor's history. Never compare or look up
+    ``correlation_id`` without a sensor scope; independent
+    integrations can produce overlapping id strings."""
+    integration_key            : IntegrationKey
+    value                      : str
+    timestamp                  : datetime
+    sensor                     : Sensor                     = None
+    detail_attrs               : Dict[ str, str ]           = None
+    has_event_video_clip       : bool                       = False
+    has_event_video_snapshot   : bool                       = False
+    correlation_role           : Optional[CorrelationRole]  = None
+    correlation_id             : Optional[str]              = None
+    sensor_history_id          : int                        = None  # Core Django SensorHistory primary key
     
     def __str__(self):
         return json.dumps( self.to_dict() )
@@ -63,8 +70,8 @@ class SensorResponse:
             entity_id = self.entity.id,
             sensor_id = self.sensor.id,
             sensor_history_id = self.sensor_history_id,
-            has_video_stream = self.has_video_stream,
-            provides_video_stream = self.sensor.provides_video_stream,
+            has_event_video_clip = self.has_event_video_clip,
+            provides_event_video_clip = self.sensor.provides_event_video_clip,
         )
 
     @property
@@ -81,7 +88,7 @@ class SensorResponse:
 
     @property
     def click_url(self):
-        if self.has_video_stream:
+        if self.has_event_video_clip:
             return self.video_browse_url
         if self.sensor_history_id and self.has_details:
             return self.details_url
@@ -94,8 +101,8 @@ class SensorResponse:
             'timestamp': self.timestamp.isoformat(),
             'sensor_id': self.sensor.id if self.sensor else None,
             'detail_attrs': self.detail_attrs,
-            'source_image_url': self.source_image_url,
-            'has_video_stream': self.has_video_stream,
+            'has_event_video_clip': self.has_event_video_clip,
+            'has_event_video_snapshot': self.has_event_video_snapshot,
             'correlation_role': str(self.correlation_role) if self.correlation_role else None,
             'correlation_id': self.correlation_id,
             'sensor_history_id': self.sensor_history_id,
@@ -111,12 +118,12 @@ class SensorResponse:
             value = self.value[0:255],
             response_datetime = self.timestamp,
             details = details,
-            source_image_url = self.source_image_url,
-            has_video_stream = self.has_video_stream,
+            has_event_video_clip = self.has_event_video_clip,
+            has_event_video_snapshot = self.has_event_video_snapshot,
             correlation_role_str = str(self.correlation_role) if self.correlation_role else None,
             correlation_id = self.correlation_id,
         )
-        
+
     @classmethod
     def from_sensor_history( cls, sensor_history : SensorHistory ) -> 'SensorResponse':
         return SensorResponse(
@@ -125,13 +132,13 @@ class SensorResponse:
             timestamp = sensor_history.response_datetime,
             sensor = sensor_history.sensor,
             detail_attrs = sensor_history.detail_attrs,
-            source_image_url = sensor_history.source_image_url,
-            has_video_stream = sensor_history.has_video_stream,
+            has_event_video_clip = sensor_history.has_event_video_clip,
+            has_event_video_snapshot = sensor_history.has_event_video_snapshot,
             correlation_role = sensor_history.correlation_role,
             correlation_id = sensor_history.correlation_id,
             sensor_history_id = sensor_history.id,
         )
-        
+
     @classmethod
     def from_string( cls, sensor_response_str : str ) -> 'SensorResponse':
         sensor_response_dict = json.loads( sensor_response_str )
@@ -147,11 +154,8 @@ class SensorResponse:
             value = sensor_response_dict.get('value'),
             timestamp = datetime.fromisoformat( sensor_response_dict.get('timestamp') ),
             detail_attrs = sensor_response_dict.get('detail_attrs'),
-            source_image_url = (
-                sensor_response_dict.get('source_image_url')
-                or sensor_response_dict.get('image_url')
-            ),
-            has_video_stream = sensor_response_dict.get('has_video_stream', False),
+            has_event_video_clip = sensor_response_dict.get('has_event_video_clip', False),
+            has_event_video_snapshot = sensor_response_dict.get('has_event_video_snapshot', False),
             correlation_role = correlation_role,
             correlation_id = sensor_response_dict.get('correlation_id'),
             sensor_history_id = sensor_response_dict.get('sensor_history_id'),

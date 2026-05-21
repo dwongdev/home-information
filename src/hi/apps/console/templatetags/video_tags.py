@@ -21,7 +21,7 @@ def sensor_response_video_stream(sensor_response):
     Returns:
         VideoStream object or None if no video available
     """
-    if not sensor_response or not sensor_response.has_video_stream:
+    if not sensor_response or not sensor_response.has_event_video_clip:
         return None
 
     try:
@@ -49,6 +49,32 @@ def sensor_response_video_stream(sensor_response):
 
     except Exception as e:
         logger.error(f"Error getting video stream for sensor response: {e}")
+        return None
+
+
+@register.simple_tag
+def sensor_response_event_snapshot_url(sensor_response):
+    """Per-event captured-frame URL for a SensorResponse, generated
+    fresh by the owning gateway each render. Returns ``None`` when
+    the response carries no snapshot (``has_event_video_snapshot``
+    False), the integration can't produce one, or any error
+    occurs."""
+    if not sensor_response or not sensor_response.has_event_video_snapshot:
+        return None
+
+    try:
+        if not sensor_response.sensor:
+            logger.debug("SensorResponse has no associated sensor")
+            return None
+
+        entity = sensor_response.sensor.entity_state.entity
+        gateway = IntegrationManager().get_integration_gateway(entity.integration_id)
+        if not gateway:
+            logger.warning(f"No integration gateway found for {entity.integration_id}")
+            return None
+        return gateway.get_sensor_response_event_snapshot_url(sensor_response)
+    except Exception as e:
+        logger.error(f"Error getting event snapshot URL for sensor response: {e}")
         return None
 
 

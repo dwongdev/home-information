@@ -155,8 +155,7 @@ class HealthStatusAlarmMapper:
                 timestamp = transition.timestamp,
                 sensor = None,
                 detail_attrs = detail_attrs,
-                source_image_url = None,
-                has_video_stream = False,
+                has_event_video_clip = False,
             ),
         ]
 

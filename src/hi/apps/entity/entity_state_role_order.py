@@ -31,6 +31,7 @@ DEFAULT_ENTITY_STATE_ROLE_ORDER : List[ EntityStateRole ] = [
     EntityStateRole.CO,
     EntityStateRole.GAS,
     EntityStateRole.MOISTURE,
+    EntityStateRole.OBJECT_PRESENCE,
     EntityStateRole.MOVEMENT,
     EntityStateRole.PRESENCE,
     EntityStateRole.OPEN_CLOSE,

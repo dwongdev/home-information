@@ -245,7 +245,7 @@ class HiModelHelper:
                                 entity              : Entity,
                                 integration_key     : IntegrationKey  = None,
                                 name                : str             = None,
-                                provides_video_stream : bool          = False,
+                                provides_event_video_clip : bool          = False,
                                 add_default_alarm   : bool            = False ) -> Sensor:
         if not name:
             name = f'{entity.name} Motion'
@@ -254,7 +254,7 @@ class HiModelHelper:
             entity_state_type = EntityStateType.MOVEMENT,
             name = name,
             integration_key = integration_key,
-            provides_video_stream = provides_video_stream,
+            provides_event_video_clip = provides_event_video_clip,
         )
         if add_default_alarm:
             cls.create_movement_event_definition(
@@ -263,6 +263,30 @@ class HiModelHelper:
                 integration_key = integration_key,
             )
         return sensor
+
+    @classmethod
+    def create_object_presence_sensor( cls,
+                                       entity                        : Entity,
+                                       integration_key               : IntegrationKey  = None,
+                                       name                          : str             = None,
+                                       provides_event_video_clip     : bool            = False,
+                                       provides_event_video_snapshot : bool            = False ) -> Sensor:
+        """OBJECT_PRESENCE sensor — typed discrete state whose value
+        space is the canonical object-class bucket set
+        (NONE / PERSON / CAR / ANIMAL / PACKAGE / OTHER). The
+        integration's converter is responsible for mapping raw
+        upstream labels onto the canonical set; the resting value
+        is OBJECT_NONE."""
+        if not name:
+            name = f'{entity.name} Object'
+        return cls.create_sensor(
+            entity = entity,
+            entity_state_type = EntityStateType.OBJECT_PRESENCE,
+            name = name,
+            integration_key = integration_key,
+            provides_event_video_clip = provides_event_video_clip,
+            provides_event_video_snapshot = provides_event_video_snapshot,
+        )
 
     @classmethod
     def create_presence_sensor( cls,
@@ -532,15 +556,16 @@ class HiModelHelper:
 
     @classmethod
     def create_sensor( cls,
-                       entity             : Entity,
-                       entity_state_type  : EntityStateType,
-                       name               : str               = None,
-                       sensor_type        : SensorType        = SensorType.DEFAULT,
-                       integration_key    : IntegrationKey    = None,
-                       value_range_str    : str               = '',
-                       units              : str               = None,
-                       entity_state_role  : EntityStateRole   = None,
-                       provides_video_stream : bool           = False ) -> Sensor:
+                       entity                        : Entity,
+                       entity_state_type             : EntityStateType,
+                       name                          : str               = None,
+                       sensor_type                   : SensorType        = SensorType.DEFAULT,
+                       integration_key               : IntegrationKey    = None,
+                       value_range_str               : str               = '',
+                       units                         : str               = None,
+                       entity_state_role             : EntityStateRole   = None,
+                       provides_event_video_clip     : bool              = False,
+                       provides_event_video_snapshot : bool              = False ) -> Sensor:
         if not name:
             name = f'{entity.name}'
 
@@ -559,7 +584,8 @@ class HiModelHelper:
             name = name,
             sensor_type_str = str( sensor_type ),
             persist_history = bool( entity_state_type not in cls.EXCLUDE_FROM_SENSOR_HISTORY ),
-            provides_video_stream = provides_video_stream,
+            provides_event_video_clip = provides_event_video_clip,
+            provides_event_video_snapshot = provides_event_video_snapshot,
         )
         sensor.integration_key = integration_key
         sensor.save()
@@ -679,12 +705,38 @@ class HiModelHelper:
             name                 : str,
             entity_state         : EntityState,
             integration_key      : IntegrationKey  = None ) -> EventDefinition:
-        
+
         return EventManager().create_simple_alarm_event_definition(
             name = name,
             event_type = EventType.SECURITY,
             entity_state = entity_state,
             value = EntityStateValue.ACTIVE,
+            security_to_alarm_level = {
+                SecurityLevel.HIGH: AlarmLevel.CRITICAL,
+                SecurityLevel.LOW: AlarmLevel.INFO,
+            },
+            event_window_secs = cls.DEFAULT_MOVEMENT_EVENT_WINDOW_SECS,
+            dedupe_window_secs = cls.DEFAULT_MOVEMENT_DEDUPE_WINDOW_SECS,
+            alarm_lifetime_secs = cls.DEFAULT_MOVEMENT_ALARM_LIFETIME_SECS,
+            integration_key = integration_key,
+        )
+
+    @classmethod
+    def create_object_presence_event_definition(
+            cls,
+            name                 : str,
+            entity_state         : EntityState,
+            integration_key      : IntegrationKey  = None ) -> EventDefinition:
+        # Conservative default: alarm on PERSON only. The
+        # EventClauseOperator vocabulary doesn't yet support NEQ/IN
+        # (see Issue #346), so "any detection" can't be expressed as
+        # a single clause. Operators wanting broader rules (car,
+        # package, etc.) can add EventDefinitions in the UI.
+        return EventManager().create_simple_alarm_event_definition(
+            name = name,
+            event_type = EventType.SECURITY,
+            entity_state = entity_state,
+            value = EntityStateValue.OBJECT_PERSON,
             security_to_alarm_level = {
                 SecurityLevel.HIGH: AlarmLevel.CRITICAL,
                 SecurityLevel.LOW: AlarmLevel.INFO,

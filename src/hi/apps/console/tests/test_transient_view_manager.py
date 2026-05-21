@@ -167,8 +167,7 @@ class TestTransientViewManager(BaseTestCase):
             timestamp=timezone.now(),
             sensor=motion_sensor,  # Motion sensor that triggered the alarm
             detail_attrs={'location': 'Front Door'},
-            source_image_url=None,
-            has_video_stream=False
+            has_event_video_clip=False
         )
         
         motion_alarm = Alarm(
@@ -230,8 +229,7 @@ class TestTransientViewManager(BaseTestCase):
             timestamp=timezone.now(),
             sensor=None,  # TODO: fix sensor reference
             detail_attrs={},
-            source_image_url=None,
-            has_video_stream=False
+            has_event_video_clip=False
         )
         
         motion_alarm = Alarm(
@@ -276,8 +274,7 @@ class TestTransientViewManager(BaseTestCase):
             timestamp=timezone.now(),
             sensor=None,  # TODO: fix sensor reference
             detail_attrs={},
-            source_image_url=None,
-            has_video_stream=False
+            has_event_video_clip=False
         )
         
         status_alarm = Alarm(
@@ -322,8 +319,7 @@ class TestTransientViewManager(BaseTestCase):
             timestamp=timezone.now(),
             sensor=None,
             detail_attrs={'location': 'Front Door'},
-            source_image_url=None,
-            has_video_stream=False
+            has_event_video_clip=False
         )
         
         motion_alarm = Alarm(

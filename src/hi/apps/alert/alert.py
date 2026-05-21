@@ -141,23 +141,18 @@ class Alert:
     def get_first_visual_content(self):
         """
         Find the first image/video content from any alarm in the alert.
-        Returns dict with image info and sensor response or None if no visual content found.
+        Returns dict with sensor response and alarm context, or None
+        if no visual content found. The snapshot / clip URLs are no
+        longer carried on the dict — templates resolve them via the
+        gateway tags using ``sensor_response`` so they always reflect
+        the integration's current configuration.
         """
         for alarm in self.alarm_list:
             for sensor_response in alarm.sensor_response_list:
-                # Check for video stream capability first (preferred over static source_image_url)
-                if sensor_response.has_video_stream:
+                has_clip = sensor_response.has_event_video_clip
+                has_snapshot = sensor_response.has_event_video_snapshot
+                if has_clip or has_snapshot:
                     return {
-                        'source_image_url': sensor_response.source_image_url,
-                        'alarm': alarm,
-                        'source_details': sensor_response,  # Keep for backward compatibility
-                        'sensor_response': sensor_response,
-                        'is_from_latest': alarm == self.alarm_list[0] if self.alarm_list else False,
-                    }
-                # Fallback to static source_image_url if no video stream
-                elif sensor_response.source_image_url:
-                    return {
-                        'source_image_url': sensor_response.source_image_url,
                         'alarm': alarm,
                         'source_details': sensor_response,  # Keep for backward compatibility
                         'sensor_response': sensor_response,
@@ -173,7 +168,7 @@ class Alert:
         video_sources = []
         for alarm in self.alarm_list:
             for sensor_response in alarm.sensor_response_list:
-                if sensor_response.has_video_stream:
+                if sensor_response.has_event_video_clip:
                     video_sources.append({
                         'sensor_response': sensor_response,
                         'alarm': alarm,

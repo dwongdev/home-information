@@ -74,8 +74,7 @@ class TestViewUrlUtils(BaseTestCase):
             timestamp=datetimeproxy.now(),
             sensor=self.video_motion_sensor,
             detail_attrs={},
-            source_image_url=None,
-            has_video_stream=False
+            has_event_video_clip=False
         )
         
         alarm = Alarm(
@@ -112,8 +111,7 @@ class TestViewUrlUtils(BaseTestCase):
             timestamp=datetimeproxy.now(),
             sensor=self.temp_sensor,
             detail_attrs={},
-            source_image_url=None,
-            has_video_stream=False
+            has_event_video_clip=False
         )
         
         alarm = Alarm(
@@ -148,8 +146,7 @@ class TestViewUrlUtils(BaseTestCase):
             timestamp=datetimeproxy.now(),
             sensor=None,  # No sensor object
             detail_attrs={'event': 'Tornado Warning'},
-            source_image_url=None,
-            has_video_stream=False
+            has_event_video_clip=False
         )
         
         alarm = Alarm(
