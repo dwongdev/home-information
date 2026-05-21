@@ -95,6 +95,8 @@ Every `EntityStateRole` declared in `required_roles` or `optional_roles` is the 
 
 Extras — roles on the entity outside the panel's declared set — are framework-owned. The panel template does not see them.
 
+**Purpose of the extras mechanism.** Extras render is a safety net for unusual `EntityType` assignments — recall `EntityType` is user-adjustable, so an entity can carry roles its type wouldn't normally expect. A panel's declared set should cover the roles the `EntityType` reasonably carries; extras handle the out-of-type leftovers. Don't omit a normally-expected role just to let the framework render it — if you want the standard rendering for a declared role, include `fallback/state_row.html` from your template instead.
+
 ## Display contexts
 
 The framework defines three `DisplayContext` values. They name **shape** — the per-author design budget — not consumer layout. CollectionView and other consumers map their own layout choices to these contexts; the panel author thinks in shape budgets and authors a template per context the panel chooses to handle.
