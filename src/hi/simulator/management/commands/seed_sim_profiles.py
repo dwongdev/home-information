@@ -55,7 +55,7 @@ detached / removed transitions for that integration.
      later disappears upstream.
   2. Repeat for ZM: switch ZoneMinder to ``baseline``, sync, add a
      custom attribute to its ★-prefixed monitor. (HomeBox sets
-     ``can_add_custom_attributes = False`` by design, so HB
+     ``allow_internal_attributes = False`` by design, so HB
      entities cannot participate in the detach/reconnect cycle and
      have no anchor item.)
   3. Switch each module to its ``baseline-changed``. Refresh sync.
@@ -365,7 +365,7 @@ class Command(BaseCommand):
 
     def _build_homebox_baseline(self, profile: SimProfile) -> int:
         # 4 items with mixed metadata richness. No ★-prefixed anchor
-        # here: HomeBox sets ``can_add_custom_attributes = False`` (the
+        # here: HomeBox sets ``allow_internal_attributes = False`` (the
         # converter is the source of truth for HB item attributes), so
         # the operator cannot add a custom attribute on the HI side
         # and the detach/reconnect cycle does not apply to HB.
@@ -451,19 +451,233 @@ class Command(BaseCommand):
         return profile.db_sim_entities.count()
 
     def _build_homebox_volume(self, profile: SimProfile) -> int:
-        # 25 items, varied metadata richness. Stresses HB list rendering
-        # and the inventory pagination/scroll behavior.
-        for index in range(25):
+        # 25 items. Items 001-006 are explicitly configured to specific
+        # shapes for targeted UI coverage (empty, partial, attachments-
+        # only, mixed, fully rich, truncation-toggle). Items 007-025
+        # use modular per-index rules to keep variety reproducible.
+        self._add_homebox_item(
+            profile,
+            'Volume Item 001',
+            item_id = 'volume-item-001',
+            quantity = 1,
+        )
+
+        self._add_homebox_item(
+            profile,
+            'Volume Item 002',
+            item_id = 'volume-item-002',
+            quantity = 1,
+            description = 'Compact cordless screwdriver, kept in the kitchen drawer.',
+            manufacturer = 'Acme',
+            model_number = 'AC-002',
+            serial_number = 'SN-00002',
+            custom_fields = 'Color=Red',
+            tags = 'tools,power',
+        )
+
+        self._add_homebox_item(
+            profile,
+            'Volume Item 003',
+            item_id = 'volume-item-003',
+            quantity = 1,
+            attachment_keys = ','.join([
+                AttachmentTemplate.MANUAL.key,
+                AttachmentTemplate.PHOTO.key,
+            ]),
+        )
+
+        self._add_homebox_item(
+            profile,
+            'Volume Item 004',
+            item_id = 'volume-item-004',
+            quantity = 1,
+            manufacturer = 'Generic',
+            model_number = 'GN-004',
+            serial_number = 'GEN-00004',
+            custom_fields = 'Storage Location=Garage Shelf B',
+            tags = 'garage,workshop',
+            attachment_keys = ','.join([
+                AttachmentTemplate.RECEIPT.key,
+                AttachmentTemplate.PHOTO.key,
+            ]),
+        )
+
+        self._add_homebox_item(
+            profile,
+            'Volume Item 005',
+            item_id = 'volume-item-005',
+            quantity = 2,
+            description = 'Fully documented stress-test item exercising every field.',
+            manufacturer = 'Acme',
+            model_number = 'AC-005',
+            serial_number = 'SN-00005',
+            asset_id = 'AST-0005',
+            purchase_from = 'Big Box Store',
+            purchase_time = '2024-06-15',
+            warranty_details = '2 year limited warranty covering parts and labor.',
+            warranty_expires = '2026-06-15',
+            notes = 'Demonstration item with all documented fields populated.',
+            custom_fields = (
+                'Color=Black, Storage Location=Basement, '
+                'Material=Steel, Battery=Li-ion'
+            ),
+            tags = 'tools,power,electronics',
+            attachment_keys = ','.join([
+                AttachmentTemplate.MANUAL.key,
+                AttachmentTemplate.RECEIPT.key,
+                AttachmentTemplate.PHOTO.key,
+                AttachmentTemplate.WARRANTY.key,
+            ]),
+        )
+
+        # Item 006: varied-length values to exercise the JS Show
+        # more / Show less truncation toggle on documented and
+        # custom fields.
+        long_warranty = (
+            'Covers manufacturing defects for 5 years from the date of purchase.\n'
+            'Excludes damage from misuse, accidents, unauthorized repairs, or normal wear.\n'
+            'Requires original proof of purchase for any claim submission.\n'
+            'Replacement parts are warranted for the remainder of the original term.\n'
+            'Shipping costs for warranty service are the responsibility of the owner.\n'
+            'Contact support@example.com to initiate a warranty claim.\n'
+            'See enclosed booklet for full terms and conditions.'
+        )
+        medium_notes = (
+            'Stored in the upstairs closet on the second shelf.\n'
+            'Original box and packing materials retained.\n'
+            'Last serviced in March; runs quietly.'
+        )
+        long_custom_value = (
+            'This unit was installed by the previous owner and has been in '
+            'continuous service for several years. It has had two minor '
+            'repairs documented in the maintenance log. The unit has been '
+            'observed to operate slightly above its rated current draw under '
+            'heavy load. A replacement filter cartridge is stored alongside '
+            'the unit. The manufacturer has issued a service bulletin for '
+            'this model number recommending an annual inspection. Operator '
+            'should consult the bulletin before performing any repairs.'
+        )
+        self._add_homebox_item(
+            profile,
+            'Volume Item 006',
+            item_id = 'volume-item-006',
+            quantity = 1,
+            description = 'Truncation toggle test item.',
+            manufacturer = 'Acme',
+            model_number = 'AC-006',
+            serial_number = 'SN-00006',
+            notes = medium_notes,
+            warranty_details = long_warranty,
+            custom_fields = (
+                f'Color=Blue, History={long_custom_value}, '
+                'Storage Location=Attic Bin 4'
+            ),
+            attachment_keys = ','.join([
+                AttachmentTemplate.PHOTO.key,
+                AttachmentTemplate.PHOTO_SQUARE.key,
+                AttachmentTemplate.PHOTO_WIDE.key,
+                AttachmentTemplate.PHOTO_WIDE_X.key,
+                AttachmentTemplate.PHOTO_TALL.key,
+                AttachmentTemplate.PHOTO_TALL_X.key,
+            ]),
+        )
+
+        custom_field_palette = [
+            'Color=Red, Storage Location=Garage Shelf B',
+            'Color=Blue, Storage Location=Basement, Condition=New',
+            'Material=Steel, Weight=2.5kg',
+            'Color=Black, Battery=Li-ion, Voltage=20V',
+            'Material=Plastic, Length=12in, Diameter=1in',
+            'Color=Green, Storage Location=Attic Bin 4',
+            'Material=Wood, Finish=Oak, Width=18in',
+        ]
+        tag_palette = [
+            'tools',
+            'tools,power',
+            'electronics',
+            'electronics,delicate',
+            'kitchen',
+            'garage,workshop',
+            'consumables',
+        ]
+        # Attachment template buckets indexed modulo 25 — first ~5
+        # empty, next ~10 single, next ~5 paired, last ~5 with
+        # three+ templates. Different choices keep the mime mix
+        # visible to the operator.
+        attachment_buckets = [
+            # 0 attachments (indices 0..4)
+            '', '', '', '', '',
+            # 1 attachment (indices 5..14)
+            AttachmentTemplate.MANUAL.key,
+            AttachmentTemplate.RECEIPT.key,
+            AttachmentTemplate.PHOTO.key,
+            AttachmentTemplate.WARRANTY.key,
+            AttachmentTemplate.MANUAL.key,
+            AttachmentTemplate.RECEIPT.key,
+            AttachmentTemplate.PHOTO.key,
+            AttachmentTemplate.WARRANTY.key,
+            AttachmentTemplate.MANUAL.key,
+            AttachmentTemplate.RECEIPT.key,
+            # 2 attachments (indices 15..19)
+            ','.join([AttachmentTemplate.MANUAL.key, AttachmentTemplate.RECEIPT.key]),
+            ','.join([AttachmentTemplate.PHOTO.key, AttachmentTemplate.WARRANTY.key]),
+            ','.join([AttachmentTemplate.RECEIPT.key, AttachmentTemplate.PHOTO.key]),
+            ','.join([AttachmentTemplate.MANUAL.key, AttachmentTemplate.WARRANTY.key]),
+            ','.join([AttachmentTemplate.PHOTO.key, AttachmentTemplate.RECEIPT.key]),
+            # 3+ attachments (indices 20..24)
+            ','.join([AttachmentTemplate.MANUAL.key, AttachmentTemplate.RECEIPT.key,
+                      AttachmentTemplate.PHOTO.key]),
+            ','.join([AttachmentTemplate.MANUAL.key, AttachmentTemplate.RECEIPT.key,
+                      AttachmentTemplate.PHOTO.key, AttachmentTemplate.WARRANTY.key]),
+            ','.join([AttachmentTemplate.PHOTO.key, AttachmentTemplate.WARRANTY.key,
+                      AttachmentTemplate.MANUAL.key]),
+            ','.join([AttachmentTemplate.RECEIPT.key, AttachmentTemplate.PHOTO.key,
+                      AttachmentTemplate.WARRANTY.key]),
+            ','.join([AttachmentTemplate.MANUAL.key, AttachmentTemplate.PHOTO.key,
+                      AttachmentTemplate.RECEIPT.key, AttachmentTemplate.WARRANTY.key]),
+        ]
+
+        for index in range(6, 25):
+            item_number = index + 1
+            kwargs = {
+                'item_id': f'volume-item-{item_number:03}',
+                'quantity': (index % 4) + 1,
+                'attachment_keys': attachment_buckets[index],
+            }
+
+            if index % 5 == 0:
+                # Fully documented item: every top-level field populated.
+                kwargs.update({
+                    'description': f'Stress-test inventory item #{item_number}',
+                    'manufacturer': 'Acme',
+                    'model_number': f'AC-{item_number:03}',
+                    'serial_number': f'SN-{item_number:05}',
+                    'asset_id': f'AST-{item_number:04}',
+                    'purchase_from': 'Big Box Store',
+                    'purchase_time': '2024-06-15',
+                    'warranty_details': '2 year limited warranty',
+                    'warranty_expires': '2026-06-15',
+                    'notes': f'Documented stress-test item #{item_number}',
+                })
+            elif index % 3 == 0:
+                # Partial documentation.
+                kwargs.update({
+                    'manufacturer': 'Generic',
+                    'serial_number': f'GEN-{item_number:05}',
+                })
+
+            if index % 4 == 0:
+                kwargs['custom_fields'] = custom_field_palette[
+                    index % len( custom_field_palette )
+                ]
+
+            if index % 3 == 0:
+                kwargs['tags'] = tag_palette[ index % len( tag_palette ) ]
+
             self._add_homebox_item(
                 profile,
-                f'Volume Item {index + 1:03}',
-                item_id = f'volume-item-{index + 1:03}',
-                description = (
-                    f'Stress-test inventory item #{index + 1}'
-                    if index % 3 == 0 else ''
-                ),
-                manufacturer = 'Acme' if index % 5 == 0 else '',
-                quantity = (index % 4) + 1,
+                f'Volume Item {item_number:03}',
+                **kwargs,
             )
         return profile.db_sim_entities.count()
 

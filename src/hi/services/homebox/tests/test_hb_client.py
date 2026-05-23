@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 from django.test import SimpleTestCase
 from requests import Response
 
-from hi.services.homebox.hb_client import HbClient
+from hi.services.homebox.shared.hb_client import HbClient
 
 
 logging.disable(logging.CRITICAL)
@@ -44,7 +44,7 @@ class TestHbClient(SimpleTestCase):
                 HbClient.API_PASSWORD: 'pass',
             })
 
-        self.assertEqual(client._api_url, 'https://homebox.local')
+        self.assertEqual(client.api_url, 'https://homebox.local')
         mock_login.assert_not_called()
         self.assertFalse(client._authenticated)
 
@@ -169,6 +169,34 @@ class TestHbClient(SimpleTestCase):
         with self.assertRaises(Exception) as context:
             client.get_items()
         self.assertIn('detail request failed', str(context.exception))
+
+    def test_get_item_returns_hb_item_from_detail_endpoint(self):
+        with patch.object(HbClient, '_login'):
+            client = HbClient(api_options=self._api_options())
+        client._make_request = Mock(return_value={'id': 'item-5', 'name': 'Five'})
+
+        item = client.get_item('item-5')
+
+        self.assertEqual(item.id, 'item-5')
+        self.assertEqual(item.name, 'Five')
+        client._make_request.assert_called_once_with(
+            'GET',
+            'https://homebox.local/v1/items/item-5',
+        )
+
+    def test_get_item_raises_when_response_is_not_dict(self):
+        with patch.object(HbClient, '_login'):
+            client = HbClient(api_options=self._api_options())
+        client._make_request = Mock(return_value=self._response(
+            status_code=200,
+            json_data=None,
+            content_type='text/html',
+            content=b'<html>not the api</html>',
+        ))
+
+        with self.assertRaises(ValueError) as context:
+            client.get_item('item-5')
+        self.assertIn('non-JSON', str(context.exception))
 
     def test_download_attachment_returns_none_when_request_is_not_response(self):
         with patch.object(HbClient, '_login'):

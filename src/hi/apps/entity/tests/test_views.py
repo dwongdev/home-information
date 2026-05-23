@@ -1,5 +1,5 @@
 import logging
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
@@ -316,15 +316,16 @@ class TestEntityEditView(DualModeViewTestCase):
         self.assertIsNotNone(new_attr)
         self.assertEqual(new_attr.value, 'new value')
 
-    def test_get_hides_add_and_update_buttons_when_entity_disallows_custom_attributes(self):
-        """When the entity is integration-managed (cannot add custom
-        attributes), the Add File / Add Info / Update buttons are
-        omitted entirely rather than rendered disabled — disabled-but-
-        visible affordances were confusing on a fully read-only
-        surface, and Update was a no-op there.
+    def test_get_hides_internal_attribute_section_when_entity_disallows_it(self):
+        """When the entity has ``allow_internal_attributes`` False
+        (e.g., an integration-managed entity whose attribute data is
+        owned externally), the entire HI internal attribute section is
+        suppressed: Add File / Add Info buttons, the Files grid, the
+        Properties list, and the Deleted attributes list are all
+        omitted from the rendered surface.
         """
-        self.entity.can_add_custom_attributes = False
-        self.entity.save(update_fields=['can_add_custom_attributes'])
+        self.entity.allow_internal_attributes = False
+        self.entity.save(update_fields=['allow_internal_attributes'])
 
         url = reverse('entity_edit', kwargs={'entity_id': self.entity.id})
         response = self.client.get(url)
@@ -335,33 +336,6 @@ class TestEntityEditView(DualModeViewTestCase):
         self.assertNotIn(f'attr-v2-add-attribute-btn-entity-{self.entity.id}', content)
         self.assertNotIn('>Add File<', content)
         self.assertNotIn('>Add Info<', content)
-
-    def test_post_rejects_new_attribute_when_entity_disallows_custom_attributes(self):
-        self.entity.can_add_custom_attributes = False
-        self.entity.save(update_fields=['can_add_custom_attributes'])
-
-        url = reverse('entity_edit', kwargs={'entity_id': self.entity.id})
-        form_data = EntityAttributeSyntheticData.create_form_data_for_entity_edit(entity=self.entity)
-
-        regular_attributes = list(self.entity.attributes.exclude(value_type_str=str(AttributeValueType.FILE)))
-        prefix = f'entity-{self.entity.id}'
-        form_data.update({
-            f'{prefix}-TOTAL_FORMS': str(len(regular_attributes) + 2),
-            f'{prefix}-INITIAL_FORMS': str(len(regular_attributes)),
-            f'{prefix}-MIN_NUM_FORMS': '0',
-            f'{prefix}-MAX_NUM_FORMS': '1000',
-            f'{prefix}-{len(regular_attributes)}-name': 'blocked_property',
-            f'{prefix}-{len(regular_attributes)}-value': 'blocked value',
-        })
-
-        response = self.client.post(url, form_data)
-
-        self.assertErrorResponse(response)
-        self.assertJsonResponse(response)
-        self.assertFalse(self.entity.attributes.filter(name='blocked_property').exists())
-
-        content = response.content.decode('utf-8')
-        self.assertIn('New attributes cannot be added for this item because attributes are managed externally.', content)
 
     def test_entity_with_complex_attribute_mix(self):
         """Test editing entity with mixed attribute types (text, file, secret)."""
@@ -435,6 +409,280 @@ class TestEntityEditView(DualModeViewTestCase):
         # Verify update succeeded
         self.entity.refresh_from_db()
         self.assertEqual(self.entity.name, 'Transaction Test Name')
+
+
+class TestEntityEditViewExternalViewData(DualModeViewTestCase):
+    """Tests for the external-data view dispatch in
+    ``EntityEditView.get()``. The external-data region renders only
+    when the entity's integration gateway returns a non-None
+    ``ExternalViewData`` payload; everything else (native entities,
+    unknown integration_id, gateway returns None) suppresses it."""
+
+    def setUp(self):
+        super().setUp()
+        self.enterContext(self.in_memory_media_storage())
+        self.native_entity = EntityAttributeSyntheticData.create_test_entity(
+            name='Native Entity',
+            integration_id=None,
+            integration_name=None,
+        )
+        self.integration_entity = EntityAttributeSyntheticData.create_test_entity(
+            name='Integration Entity',
+            integration_id='ext_view_test',
+            integration_name='ext_view_test_name',
+        )
+
+    def _make_structured_view_data(self):
+        from hi.integrations.external_view_data import (
+            NameValuePair, AttachmentRef, StructuredViewData,
+        )
+        return StructuredViewData(
+            deep_link_url='https://upstream.example/items/42',
+            attributes=[
+                NameValuePair(name='Manufacturer', value='Acme'),
+                NameValuePair(name='Model', value='WidgetPro'),
+            ],
+            attachments=[
+                AttachmentRef(
+                    id='att1',
+                    title='Receipt',
+                    mime_type='image/png',
+                    thumbnail_url='https://upstream.example/thumb/att1',
+                    open_url='https://upstream.example/open/att1',
+                ),
+            ],
+        )
+
+    def _make_minimal_view_data(self):
+        from hi.integrations.external_view_data import MinimalViewData
+        return MinimalViewData(deep_link_url='https://upstream.example/items/99')
+
+    def test_native_entity_omits_section_and_skips_lookup(self):
+        """A native entity (no integration_id) must NOT cause an
+        integration-gateway lookup and must render without the
+        external-view-data DOM marker."""
+        url = reverse('entity_edit', kwargs={'entity_id': self.native_entity.id})
+
+        with patch(
+            'hi.integrations.integration_manager.IntegrationManager.get_integration_gateway'
+        ) as mock_lookup:
+            response = self.client.get(url)
+
+        self.assertSuccessResponse(response)
+        self.assertIsNone(response.context['external_view_data'])
+        mock_lookup.assert_not_called()
+        self.assertNotIn('attr-v2-external-view-data', response.content.decode('utf-8'))
+
+    def test_integration_entity_hook_returns_none_omits_section(self):
+        """Integration entity whose gateway hook returns None: the
+        lookup happens but the section is suppressed."""
+        url = reverse('entity_edit', kwargs={'entity_id': self.integration_entity.id})
+
+        mock_gateway = Mock()
+        mock_gateway.get_external_view_data.return_value = None
+
+        with patch(
+            'hi.integrations.integration_manager.IntegrationManager.get_integration_gateway',
+            return_value=mock_gateway,
+        ) as mock_lookup:
+            response = self.client.get(url)
+
+        self.assertSuccessResponse(response)
+        self.assertIsNone(response.context['external_view_data'])
+        mock_lookup.assert_called_with('ext_view_test')
+        # Confirm the gateway hook was invoked at least once with the
+        # right entity. EntityEditView.get() can be re-entered during
+        # render (e.g., when the status modal falls back to the edit
+        # view for an entity with no state data), so we don't pin the
+        # exact call count.
+        mock_gateway.get_external_view_data.assert_called_with(self.integration_entity)
+        self.assertNotIn('attr-v2-external-view-data', response.content.decode('utf-8'))
+
+    def test_integration_entity_structured_view_data_renders_section(self):
+        """``StructuredViewData`` renders the structured partial with
+        attribute rows, attachments, and the deep link."""
+        url = reverse('entity_edit', kwargs={'entity_id': self.integration_entity.id})
+
+        structured = self._make_structured_view_data()
+        mock_gateway = Mock()
+        mock_gateway.get_external_view_data.return_value = structured
+
+        with patch(
+            'hi.integrations.integration_manager.IntegrationManager.get_integration_gateway',
+            return_value=mock_gateway,
+        ):
+            response = self.client.get(url)
+
+        self.assertSuccessResponse(response)
+        content = response.content.decode('utf-8')
+        self.assertIn('attr-v2-external-view-data', content)
+        self.assertIn('attr-v2-external-structured', content)
+        self.assertIn('Manufacturer', content)
+        self.assertIn('Acme', content)
+        self.assertIn('WidgetPro', content)
+        self.assertIn('https://upstream.example/thumb/att1', content)
+        self.assertIn('https://upstream.example/items/42', content)
+
+    def test_integration_entity_minimal_view_data_renders_deep_link_only(self):
+        """``MinimalViewData`` renders only the deep link placeholder
+        — no structured-partial markers."""
+        url = reverse('entity_edit', kwargs={'entity_id': self.integration_entity.id})
+
+        minimal = self._make_minimal_view_data()
+        mock_gateway = Mock()
+        mock_gateway.get_external_view_data.return_value = minimal
+
+        with patch(
+            'hi.integrations.integration_manager.IntegrationManager.get_integration_gateway',
+            return_value=mock_gateway,
+        ):
+            response = self.client.get(url)
+
+        self.assertSuccessResponse(response)
+        content = response.content.decode('utf-8')
+        self.assertIn('attr-v2-external-view-data', content)
+        self.assertIn('attr-v2-external-minimal', content)
+        self.assertIn('https://upstream.example/items/99', content)
+        self.assertNotIn('attr-v2-external-structured', content)
+
+    def test_integration_entity_minimal_view_data_surfaces_error_message(self):
+        """``MinimalViewData.error_message`` renders in the modal so
+        the operator sees the failure reason inline rather than only
+        in server logs."""
+        from hi.integrations.external_view_data import MinimalViewData
+
+        url = reverse('entity_edit', kwargs={'entity_id': self.integration_entity.id})
+
+        minimal = MinimalViewData(
+            deep_link_url='https://upstream.example/items/99',
+            error_message='HomeBox upstream unavailable: Connection refused',
+        )
+        mock_gateway = Mock()
+        mock_gateway.get_external_view_data.return_value = minimal
+
+        with patch(
+            'hi.integrations.integration_manager.IntegrationManager.get_integration_gateway',
+            return_value=mock_gateway,
+        ):
+            response = self.client.get(url)
+
+        self.assertSuccessResponse(response)
+        content = response.content.decode('utf-8')
+        self.assertIn('attr-ext-minimal-error', content)
+        self.assertIn('HomeBox upstream unavailable: Connection refused', content)
+        # Deep link is still offered alongside the error.
+        self.assertIn('https://upstream.example/items/99', content)
+
+    def test_external_view_data_and_internal_attributes_coexist(self):
+        """The external-data view and the internal attribute list are
+        independently gated: an integration entity with both internal
+        attributes AND an external view payload renders both."""
+        EntityAttributeSyntheticData.create_test_text_attribute(
+            entity=self.integration_entity,
+            name='internal_prop',
+            value='internal value',
+        )
+        url = reverse('entity_edit', kwargs={'entity_id': self.integration_entity.id})
+
+        structured = self._make_structured_view_data()
+        mock_gateway = Mock()
+        mock_gateway.get_external_view_data.return_value = structured
+
+        with patch(
+            'hi.integrations.integration_manager.IntegrationManager.get_integration_gateway',
+            return_value=mock_gateway,
+        ):
+            response = self.client.get(url)
+
+        self.assertSuccessResponse(response)
+        content = response.content.decode('utf-8')
+        # External-data view marker.
+        self.assertIn('attr-v2-external-structured', content)
+        # Internal attribute list marker: the internal attribute name
+        # appears in the rendered attribute list.
+        self.assertIn('internal_prop', content)
+
+    def test_connect_mode_renders_external_view_with_internal_attributes_suppressed(self):
+        """``allow_internal_attributes=False`` plus a populated
+        ``external_view_data`` payload: external-data view renders;
+        internal attribute list does not."""
+        self.integration_entity.allow_internal_attributes = False
+        self.integration_entity.save(update_fields=['allow_internal_attributes'])
+
+        EntityAttributeSyntheticData.create_test_text_attribute(
+            entity=self.integration_entity,
+            name='orphan_internal_prop',
+            value='should not render',
+        )
+
+        url = reverse('entity_edit', kwargs={'entity_id': self.integration_entity.id})
+
+        structured = self._make_structured_view_data()
+        mock_gateway = Mock()
+        mock_gateway.get_external_view_data.return_value = structured
+
+        with patch(
+            'hi.integrations.integration_manager.IntegrationManager.get_integration_gateway',
+            return_value=mock_gateway,
+        ):
+            response = self.client.get(url)
+
+        self.assertSuccessResponse(response)
+        content = response.content.decode('utf-8')
+        self.assertIn('attr-v2-external-view-data', content)
+        self.assertIn('attr-v2-external-structured', content)
+        self.assertNotIn('orphan_internal_prop', content)
+        self.assertNotIn('>Add File<', content)
+        self.assertNotIn('>Add Info<', content)
+
+    def test_unknown_integration_id_omits_section(self):
+        """If ``IntegrationManager.get_integration_gateway`` raises
+        ``KeyError`` (e.g., the integration_id is stale or the
+        integration was never registered), the view catches the
+        exception and suppresses the external-data view — no error
+        escapes."""
+        url = reverse('entity_edit', kwargs={'entity_id': self.integration_entity.id})
+
+        with patch(
+            'hi.integrations.integration_manager.IntegrationManager.get_integration_gateway',
+            side_effect=KeyError('Unknown integration id "ext_view_test".'),
+        ):
+            response = self.client.get(url)
+
+        self.assertSuccessResponse(response)
+        self.assertIsNone(response.context['external_view_data'])
+        self.assertNotIn('attr-v2-external-view-data', response.content.decode('utf-8'))
+
+    def test_custom_template_view_data_uses_instance_template_name(self):
+        """``CustomTemplateViewData`` is the escape hatch: the
+        ``template_name`` set on the instance drives the include. We
+        verify the include call site honors the instance attribute by
+        pointing at a template that emits a distinctive marker, then
+        asserting the marker appears in the rendered output."""
+        from hi.integrations.external_view_data import CustomTemplateViewData
+
+        custom = CustomTemplateViewData(
+            template_name='integrations/external_data/entity/minimal.html',
+            deep_link_url='https://upstream.example/custom/1',
+            context={'unused': 'unused'},
+        )
+        mock_gateway = Mock()
+        mock_gateway.get_external_view_data.return_value = custom
+
+        url = reverse('entity_edit', kwargs={'entity_id': self.integration_entity.id})
+        with patch(
+            'hi.integrations.integration_manager.IntegrationManager.get_integration_gateway',
+            return_value=mock_gateway,
+        ):
+            response = self.client.get(url)
+
+        self.assertSuccessResponse(response)
+        content = response.content.decode('utf-8')
+        # The minimal partial is what we asked for via template_name,
+        # so its DOM marker must be present even though the instance
+        # is a CustomTemplateViewData.
+        self.assertIn('attr-v2-external-minimal', content)
+        self.assertIn('https://upstream.example/custom/1', content)
 
 
 class TestEntityPropertiesEditView(SyncViewTestCase):

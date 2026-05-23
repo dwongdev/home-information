@@ -32,7 +32,7 @@ by using the AttributeItemEditContext pattern.
     </div>
     {% endif %}
   
-    <div class="attr-v2-owner-fields }}">
+    <div class="attr-v2-owner-fields">
       {% block owner_fields %}
       <!-- Subclasses should override this block to provide owner-specific fields -->
       {% endblock %}
@@ -90,7 +90,7 @@ by using the AttributeItemEditContext pattern.
       <div class="{{ DIVID.ATTR_V2_ACTION_BUTTONS_CLASS }}">
         {% block additional_actions %}
         {% endblock %}
-        {% if attr_page_context.can_add_custom_attributes %}
+        {% if attr_page_context.allow_internal_attributes and attr_page_context.can_add_custom_attributes %}
         {% block file_upload_button %}
         <button type="button"
                 class="btn btn-sm btn-outline-primary mb-0"
@@ -114,22 +114,34 @@ by using the AttributeItemEditContext pattern.
 <!-- Scrollable Content Area (below sticky panel) -->
 <div id="{{ attr_page_context.scrollable_content_html_id }}"
      class="{{ DIVID.ATTR_V2_SCROLLABLE_CONTENT_CLASS }}">
-  
+
+  {% if attr_page_context.allow_internal_attributes %}
+
   <!-- Files Section -->
   {% block files_section %}
   {% include "attribute/components/file_grid.html" with file_attributes=file_attributes %}
   {% endblock %}
-  
+
   <!-- Properties Section -->
   {% block properties_section %}
   {% include "attribute/components/regular_attribute_list.html" with regular_attributes_formset=regular_attributes_formset %}
   {% endblock %}
-  
+
   <!-- Additional Sections -->
   {% block additional_sections %}
   {% include "attribute/components/deleted_attribute_list.html" with deleted_attributes=deleted_attributes %}
   {% endblock %}
-  
+
+  {% endif %}
+
+  {% block external_view_data %}
+  {% if external_view_data %}
+  <div class="attr-v2-external-view-data">
+    {% include external_view_data.template_name with view_data=external_view_data %}
+  </div>
+  {% endif %}
+  {% endblock %}
+
 </div>
 
 

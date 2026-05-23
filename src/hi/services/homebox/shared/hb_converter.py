@@ -2,96 +2,39 @@ from typing import Dict, List, Optional
 import mimetypes
 import os
 
-from django.db import transaction
 from django.core.files.base import ContentFile
 
 from hi.apps.attribute.enums import AttributeType, AttributeValueType
 from hi.apps.entity.enums import EntityType
-from hi.apps.entity.models import Entity, EntityAttribute
 from hi.integrations.transient_models import IntegrationKey
 
-from .hb_metadata import HbMetaData
+from hi.services.homebox.hb_metadata import HbMetaData
 from .hb_models import HbItem
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+# Canonical mapping of HbItem properties to user-visible labels. Shared
+# by the Connect-mode resolver (live read-only display) and the
+# importer's synthetic-field generation so both surfaces expose the
+# same set of HomeBox item metadata.
+# (HbItem property, display label)
+HB_ITEM_FIELD_PAIRS = [
+    ( 'description', 'Description' ),
+    ( 'manufacturer', 'Manufacturer' ),
+    ( 'model_number', 'Model Number' ),
+    ( 'serial_number', 'Serial Number' ),
+    ( 'asset_id', 'Asset ID' ),
+    ( 'purchase_from', 'Purchased From' ),
+    ( 'purchase_time', 'Purchase Date' ),
+    ( 'warranty_details', 'Warranty Details' ),
+    ( 'warranty_expires', 'Warranty Expires' ),
+    ( 'notes', 'Notes' ),
+]
+
+
 class HbConverter:
-
-    HB_ITEM_ATTRIBUTE_FIELD_MAP = [
-        ( 'description', 'Description' ),
-        ( 'serial_number', 'Serial Number' ),
-        ( 'model_number', 'Model Number' ),
-        ( 'manufacturer', 'Manufacturer' ),
-    ]
-
-    @classmethod
-    def create_models_for_hb_item( cls,
-                                   hb_item : HbItem,
-                                   entity  : Optional[Entity] = None ) -> Entity:
-        """
-        Create or repopulate the integration-owned components for an
-        HbItem. When ``entity`` is None (the standard import path), a
-        fresh Entity is created from the upstream payload. When
-        ``entity`` is provided (the auto-reconnect path from Issue
-        #281), the integration-owned fields on that entity are
-        repopulated; the entity's ``name`` is deliberately preserved
-        because the user may have edited it before/after the
-        intervening disconnect.
-        """
-        with transaction.atomic():
-            entity_integration_key = cls.hb_item_to_integration_key( hb_item = hb_item )
-            entity_payload = cls.hb_item_to_entity_payload( hb_item = hb_item )
-
-            if entity is None:
-                entity = Entity(
-                    name = cls.hb_item_to_entity_name( hb_item = hb_item ),
-                    entity_type_str = str( cls.hb_item_to_entity_type( hb_item = hb_item ) ),
-                )
-
-            # The fields below apply equally to fresh-create and
-            # reconnect: integration_key, integration_payload, and the
-            # integration-managed access flags are all integration-owned
-            # and must reflect the current upstream state. The entity
-            # name and entity_type are intentionally left alone on the
-            # reconnect path (set above only for fresh-create).
-            entity.integration_key = entity_integration_key
-            entity.integration_payload = entity_payload
-            entity.can_user_delete = HbMetaData.allow_entity_deletion
-            entity.can_add_custom_attributes = HbMetaData.can_add_custom_attributes
-            entity.save()
-
-        return entity
-
-    @classmethod
-    def update_models_for_hb_item( cls, entity : Entity, hb_item ) -> List[str]:
-        messages = list()
-
-        with transaction.atomic():
-            entity_name = cls.hb_item_to_entity_name( hb_item = hb_item )
-            if entity.name != entity_name:
-                messages.append( f'Name changed for {entity}. Setting to "{entity_name}"' )
-                entity.name = entity_name
-
-            desired_entity_type = cls.hb_item_to_entity_type( hb_item = hb_item )
-            if entity.entity_type != desired_entity_type:
-                messages.append( f'Entity type changed for {entity}. Setting to "{desired_entity_type}"' )
-                entity.entity_type = desired_entity_type
-
-            if entity.can_add_custom_attributes != HbMetaData.can_add_custom_attributes:
-                messages.append( f'can_add_custom_attributes changed for {entity}.' )
-                entity.can_add_custom_attributes = HbMetaData.can_add_custom_attributes
-
-            new_payload = cls.hb_item_to_entity_payload( hb_item = hb_item )
-            if entity.integration_payload != new_payload:
-                entity.integration_payload = new_payload
-                messages.append( f'Integration payload updated for {entity}.' )
-
-            if messages:
-                entity.save()
-
-        return messages
 
     @classmethod
     def hb_item_to_integration_key( cls, hb_item: HbItem ) -> IntegrationKey:
@@ -109,7 +52,7 @@ class HbConverter:
                 f'{hb_field.get("name", "")}. Cannot create integration key.'
             )
             return None
-        
+
         return IntegrationKey(
             integration_id = HbMetaData.integration_id,
             integration_name = f'field:{field_id}',
@@ -122,7 +65,7 @@ class HbConverter:
         if not item_name:
             logger.error(f'Item name is missing for HomeBox item with id {hb_item.id}. Using default name.' )
             return f'HomeBox Item {hb_item.id}'
-        
+
         return item_name
 
     @classmethod
@@ -170,24 +113,24 @@ class HbConverter:
                 'updatedAt': location.get( 'updatedAt' ),
             }
 
-        labels = hb_item.labels
-        if labels is None:
-            logger.warning( f'HomeBox item {hb_item.id} missing labels list' )
-            payload['labels'] = []
+        tags = hb_item.tags
+        if tags is None:
+            logger.warning( f'HomeBox item {hb_item.id} missing tags list' )
+            payload['tags'] = []
         else:
-            normalized_labels: List[Dict] = []
-            for label in labels:
-                if not isinstance( label, dict ):
+            normalized_tags: List[Dict] = []
+            for tag in tags:
+                if not isinstance( tag, dict ):
                     continue
-                normalized_labels.append({
-                    'id': label.get( 'id' ),
-                    'name': label.get( 'name' ),
-                    'description': label.get( 'description' ),
-                    'color': label.get( 'color' ),
-                    'created_at': label.get( 'createdAt' ),
-                    'updated_at': label.get( 'updatedAt' ),
+                normalized_tags.append({
+                    'id': tag.get( 'id' ),
+                    'name': tag.get( 'name' ),
+                    'description': tag.get( 'description' ),
+                    'color': tag.get( 'color' ),
+                    'created_at': tag.get( 'createdAt' ),
+                    'updated_at': tag.get( 'updatedAt' ),
                 })
-            payload['labels'] = normalized_labels
+            payload['tags'] = normalized_tags
 
         return payload
 
@@ -199,7 +142,7 @@ class HbConverter:
     def _hb_item_to_field_list( cls, hb_item: HbItem ) -> List[Dict]:
         hb_field_list = list( hb_item.fields )
 
-        for key, name in cls.HB_ITEM_ATTRIBUTE_FIELD_MAP:
+        for key, name in HB_ITEM_FIELD_PAIRS:
             value = str( getattr( hb_item, key, '' ) or '' ).strip()
             if not value:
                 continue
@@ -387,96 +330,3 @@ class HbConverter:
         payload['file_value'] = ContentFile( raw_content, name = filename )
 
         return payload
-
-    @classmethod
-    def create_attribute_from_hb_field( cls,
-                                        entity: Entity,
-                                        hb_field: Dict,
-                                        order_id: int ) -> Optional[EntityAttribute]:
-        payload = cls.hb_field_to_attribute_payload(
-            hb_field = hb_field,
-            order_id = order_id,
-        )
-        if not payload:
-            return None
-
-        return EntityAttribute.objects.create(
-            entity = entity,
-            **payload,
-        )
-
-    @classmethod
-    def update_attribute_from_hb_field( cls,
-                                        attribute: EntityAttribute,
-                                        hb_field: Dict,
-                                        order_id: int ) -> bool:
-        payload = cls.hb_field_to_attribute_payload(
-            hb_field = hb_field,
-            order_id = order_id,
-        )
-        if not payload:
-            return False
-
-        incoming_file = payload.pop( 'file_value', None )
-
-        was_changed = False
-        for field_name, field_value in payload.items():
-            if getattr( attribute, field_name ) != field_value:
-                setattr( attribute, field_name, field_value )
-                was_changed = True
-
-        # Only update file content when needed; this avoids rewriting the same file on each sync.
-        if incoming_file and not attribute.file_value:
-            attribute.file_value = incoming_file
-            was_changed = True
-
-        if was_changed:
-            attribute.save()
-
-        return was_changed
-
-    @classmethod
-    def create_attribute_from_hb_attachment( cls,
-                                             entity: Entity,
-                                             hb_attachment: Dict,
-                                             order_id: int ) -> Optional[EntityAttribute]:
-        payload = cls.hb_attachment_to_attribute_payload(
-            hb_attachment = hb_attachment,
-            order_id = order_id,
-        )
-        if not payload:
-            return None
-
-        return EntityAttribute.objects.create(
-            entity = entity,
-            **payload,
-        )
-
-    @classmethod
-    def update_attribute_from_hb_attachment( cls,
-                                             attribute: EntityAttribute,
-                                             hb_attachment: Dict,
-                                             order_id: int ) -> bool:
-        payload = cls.hb_attachment_to_attribute_payload(
-            hb_attachment = hb_attachment,
-            order_id = order_id,
-        )
-        if not payload:
-            return False
-
-        incoming_file = payload.pop( 'file_value', None )
-
-        was_changed = False
-        for field_name, field_value in payload.items():
-            if getattr( attribute, field_name ) != field_value:
-                setattr( attribute, field_name, field_value )
-                was_changed = True
-
-        if incoming_file and not attribute.file_value:
-            attribute.file_value = incoming_file
-            was_changed = True
-
-        if was_changed:
-            attribute.save()
-
-        return was_changed
