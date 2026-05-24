@@ -5,11 +5,11 @@ from hi.apps.entity.models import Entity
 from hi.apps.system.enums import HealthStatusType
 from hi.apps.system.health_status_provider import HealthStatusProvider
 
-from hi.integrations.external_view_data import ExternalViewData
-from hi.integrations.integration_controller import IntegrationController
-from hi.integrations.integration_gateway import IntegrationGateway
-from hi.integrations.integration_manage_view_pane import IntegrationManageViewPane
-from hi.integrations.integration_synchronizer import IntegrationSynchronizer
+from hi.integrations.connect.external_view_data import ExternalViewData
+from hi.integrations.connect.integration_controller import IntegrationController
+from hi.integrations.connect.integration_gateway import IntegrationGateway
+from hi.integrations.connect.integration_manage_view_pane import IntegrationManageViewPane
+from hi.integrations.connect.integration_synchronizer import IntegrationSynchronizer
 from hi.integrations.models import IntegrationAttribute
 from hi.integrations.transient_models import (
     ConnectionTestResult,
@@ -22,7 +22,7 @@ from .hb_controller import HomeBoxController
 from .hb_manage_view_pane import HbManageViewPane
 from .shared.hb_manager import HomeBoxManager
 from .hb_metadata import HbMetaData
-from .importer.hb_sync import HomeBoxSynchronizer
+from .connector.hb_sync import HomeBoxSynchronizer
 from .monitors import HomeBoxMonitor
 
 logger = logging.getLogger(__name__)
@@ -74,21 +74,21 @@ class HomeBoxGateway(IntegrationGateway):
                 error_message=f'Configuration validation failed: {e}'
             )
 
-    def test_connection(
+    def validate_access(
             self,
             integration_attributes: List[IntegrationAttribute],
             timeout_secs: Optional[float],
     ) -> ConnectionTestResult:
-        """Live connection probe; delegates to HomeBoxManager."""
+        """Live access validation probe; delegates to HomeBoxManager."""
         try:
             hb_manager = HomeBoxManager()
-            return hb_manager.test_connection(
+            return hb_manager.validate_access(
                 integration_attributes = integration_attributes,
                 timeout_secs = timeout_secs,
             )
         except Exception as e:
-            logger.exception(f'Error in HomeBox connection test: {e}')
-            return ConnectionTestResult.failure(f'Connection test error: {e}')
+            logger.exception(f'Error in HomeBox access validation: {e}')
+            return ConnectionTestResult.failure(f'Access validation error: {e}')
 
     def get_external_view_data(self, entity: Entity) -> Optional[ExternalViewData]:
         from .connector.hb_connector import HomeBoxConnector

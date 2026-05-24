@@ -9,8 +9,8 @@ from django.urls import reverse
 
 from hi.apps.attribute.enums import AttributeValueType
 from hi.integrations.enums import IntegrationAttributeType, IntegrationDisableMode
-from hi.integrations.integration_data import IntegrationData
-from hi.integrations.integration_gateway import IntegrationGateway
+from hi.integrations.connect.integration_data import IntegrationData
+from hi.integrations.connect.integration_gateway import IntegrationGateway
 from hi.integrations.integration_manager import IntegrationManager
 from hi.integrations.models import Integration
 from hi.integrations.transient_models import IntegrationMetaData
@@ -203,15 +203,15 @@ class _SyncTestSynchronizer:
         self._description = description
         self.sync_called = False
 
-    def get_description(self, is_initial_import):
-        self.last_is_initial_import = is_initial_import
+    def get_description(self, is_initial_connect):
+        self.last_is_initial_connect = is_initial_connect
         return self._description
 
-    def get_result_title(self, is_initial_import):
+    def get_result_title(self, is_initial_connect):
         return 'Test Sync Result'
 
-    def sync(self, is_initial_import=False, preserve_user_data=True):
-        from hi.integrations.sync_result import IntegrationSyncResult
+    def sync(self, is_initial_connect=False, preserve_user_data=True):
+        from hi.integrations.connect.sync_result import IntegrationSyncResult
         self.sync_called = True
         self.last_preserve_user_data = preserve_user_data
         return IntegrationSyncResult(
@@ -289,9 +289,9 @@ class _SyncIncapableGateway(IntegrationGateway):
 class PreSyncViewTests(SyncViewTestCase):
     """
     Framework pre-sync confirmation modal. Renders the synchronizer
-    description plus IMPORT/REFRESH and (first-time only) REVIEW
-    CONFIG actions; 404s when the integration does not provide a
-    synchronizer.
+    description plus CONNECT/Check-for-updates and (first-time only)
+    REVIEW CONFIG actions; 404s when the integration does not provide
+    a synchronizer.
     """
 
     INTEGRATION_ID = 'sync_view_test'
@@ -339,32 +339,12 @@ class PreSyncViewTests(SyncViewTestCase):
         response = self.client.get(self._url())
         self.assertEqual(response.status_code, 404)
 
-    def test_review_config_action_present_on_initial_import(self):
-        """REVIEW CONFIG button is shown only on the first-time path.
-
-        With no entities for this integration, is_initial_import=True
-        and the REVIEW CONFIG affordance must appear so the user can
-        return to the configure step.
-        """
-        response = self.client.get(self._url())
-        self.assertSuccessResponse(response)
-        self.assertIn('REVIEW CONFIG', response.content.decode())
-
-    def test_review_config_action_absent_after_initial_import(self):
-        """REVIEW CONFIG is omitted on the manage-page entry path.
-
-        With at least one entity already imported, is_initial_import
-        is False; the user came from the manage page and CANCEL takes
-        them back, so REVIEW CONFIG is unnecessary.
-        """
-        from hi.apps.entity.enums import EntityType
-        from hi.apps.entity.models import Entity
-        Entity.objects.create(
-            integration_id=self.INTEGRATION_ID,
-            integration_name='already_imported',
-            name='Already Imported',
-            entity_type_str=EntityType.default_value(),
-        )
+    def test_review_config_action_never_rendered(self):
+        """The first-time CONNECT path is collapsed into
+        IntegrationEnableView (Phase 7); pre-sync is now only the
+        update-check path. REVIEW CONFIG was an artifact of the
+        first-time round-trip and must no longer render anywhere
+        in this template."""
         response = self.client.get(self._url())
         self.assertSuccessResponse(response)
         self.assertNotIn('REVIEW CONFIG', response.content.decode())
@@ -386,7 +366,7 @@ class PreSyncViewTests(SyncViewTestCase):
         response = self.client.get(self._url())
         self.assertSuccessResponse(response)
         body = response.content.decode()
-        self.assertIn('>REFRESH<', body.replace('\n', ''))
+        self.assertIn('>UPDATE', body)
         self.assertNotIn('RETAIN MISSING', body)
         self.assertNotIn('REMOVE MISSING', body)
 
@@ -491,21 +471,22 @@ class SyncViewTests(SyncViewTestCase):
 # --------------------------------------------------------------------------
 
 
-class EnableViewReviewConfigTests(SyncViewTestCase):
+class EnableViewTests(SyncViewTestCase):
     """
-    IntegrationEnableView accepts both first-time Configure and Review
-    Config (post-enable). The button label switches with state, and
-    the post-enable GET no longer 400s.
+    IntegrationEnableView: Phase 7 collapse. The view renders the
+    config form with a CONNECT action button regardless of the
+    integration's is_enabled state; the legacy review-mode round
+    trip (UPDATE label + CONTINUE-to-pre-sync) is gone.
     """
 
-    INTEGRATION_ID = 'enable_review_view_test'
+    INTEGRATION_ID = 'enable_view_test'
 
     def setUp(self):
         super().setUp()
         IntegrationManager().reset_for_testing()
         self.integration = Integration.objects.create(
             integration_id=self.INTEGRATION_ID,
-            is_enabled=True,
+            is_enabled=False,
             is_paused=False,
         )
         self.gateway = _SyncCapableGateway(integration_id=self.INTEGRATION_ID)
@@ -520,50 +501,65 @@ class EnableViewReviewConfigTests(SyncViewTestCase):
             kwargs={'integration_id': self.INTEGRATION_ID},
         )
 
-    def test_get_post_enable_does_not_400(self):
-        """Removed is_enabled BadRequest: GET on an enabled integration
-        must return 200 so Review Config can re-render the form."""
-        response = self.client.get(self._url())
-        self.assertSuccessResponse(response)
-
-    def test_get_post_enable_renders_update_button_label(self):
-        """Review-mode GET uses 'UPDATE' as the action label, not 'CONFIGURE'."""
+    def test_get_renders_connect_action_label(self):
+        # Asserts the visible action label is CONNECT. Internal CSS / HTML
+        # comment text in shared attribute-form components may include
+        # the substrings 'update'/'UPDATE'; this test pins the visible
+        # button text without false positives on framework boilerplate.
         response = self.client.get(self._url())
         self.assertSuccessResponse(response)
         body = response.content.decode()
-        self.assertIn('UPDATE', body)
+        self.assertIn('>\n          CONNECT\n        </button>', body)
         self.assertNotIn('CONFIGURE', body)
+        self.assertNotIn('CONTINUE', body)
 
-    def test_get_post_enable_renders_continue_action(self):
-        """Review-mode GET replaces the dismiss CANCEL with a CONTINUE
-        action that returns to the pre-sync modal. Without this swap a
-        user reviewing config with no changes has only SAVE (which
-        re-saves) or CANCEL (which aborts the whole sync flow) — both
-        wrong for the read-only review path."""
-        response = self.client.get(self._url())
-        self.assertSuccessResponse(response)
-        body = response.content.decode()
-        self.assertIn('CONTINUE', body)
-        # Cancel button has id="hi-modal-cancel"; its absence in review
-        # mode is what we're pinning here.
-        self.assertNotIn('hi-modal-cancel', body)
-        # The CONTINUE action must point at the pre-sync URL.
-        self.assertIn(
-            reverse('integrations_pre_sync', kwargs={'integration_id': self.INTEGRATION_ID}),
-            body,
-        )
-
-    def test_get_first_time_renders_configure_button_label(self):
-        """First-time GET (is_enabled=False) keeps the original
-        'CONFIGURE' label and the dismiss CANCEL."""
-        self.integration.is_enabled = False
+    def test_get_works_when_already_enabled(self):
+        self.integration.is_enabled = True
         self.integration.save()
         response = self.client.get(self._url())
         self.assertSuccessResponse(response)
         body = response.content.decode()
-        self.assertIn('CONFIGURE', body)
+        self.assertIn('CONNECT', body)
         self.assertIn('hi-modal-cancel', body)
-        self.assertNotIn('CONTINUE', body)
+
+    def test_post_enables_and_runs_sync_when_synchronizer_exists(self):
+        # Phase 7 collapse: a successful CONNECT POST enables the
+        # integration and immediately invokes the synchronizer. The
+        # attribute-form processing is short-circuited via patch since
+        # the formset plumbing has its own coverage; the new wiring
+        # under test is the enable → sync chain plus the sync-result
+        # modal render.
+        from django.http import HttpResponse
+        from hi.integrations.connect.views import IntegrationEnableView
+        with patch.object(
+                IntegrationEnableView, 'post_attribute_form',
+                return_value=HttpResponse(status=200),
+        ):
+            response = self.client.post(self._url(), {})
+        self.assertSuccessResponse(response)
+        self.integration.refresh_from_db()
+        self.assertTrue(self.integration.is_enabled)
+        self.assertTrue(self.gateway._synchronizer.sync_called)
+        self.assertIn('sync-result', response.content.decode().lower())
+
+    def test_post_skips_sync_when_synchronizer_absent(self):
+        # Synchronizer-less integrations enable and return the legacy
+        # redirect path instead of routing through sync.
+        IntegrationManager()._integration_data_map[self.INTEGRATION_ID] = IntegrationData(
+            integration_gateway=_SyncIncapableGateway(self.INTEGRATION_ID),
+            integration=self.integration,
+        )
+        from django.http import HttpResponse
+        from hi.integrations.connect.views import IntegrationEnableView
+        with patch.object(
+                IntegrationEnableView, 'post_attribute_form',
+                return_value=HttpResponse(status=200),
+        ):
+            response = self.client.post(self._url(), {})
+        self.integration.refresh_from_db()
+        self.assertTrue(self.integration.is_enabled)
+        # No synchronizer → no sync_result modal in the response body.
+        self.assertNotIn('sync-result', response.content.decode().lower())
 
 
 # --------------------------------------------------------------------------
@@ -582,13 +578,13 @@ class _PlacementTestSynchronizer:
         self._sync_result = sync_result
         self.sync_called = False
 
-    def get_description(self, is_initial_import):
+    def get_description(self, is_initial_connect):
         return None
 
-    def get_result_title(self, is_initial_import):
+    def get_result_title(self, is_initial_connect):
         return 'Placement Test'
 
-    def sync(self, is_initial_import=False, preserve_user_data=True):
+    def sync(self, is_initial_connect=False, preserve_user_data=True):
         self.sync_called = True
         self.last_preserve_user_data = preserve_user_data
         return self._sync_result
@@ -643,7 +639,7 @@ class PlacementFlowTests(SyncViewTestCase):
         from hi.apps.entity.enums import EntityType
         from hi.apps.entity.models import Entity
         from hi.apps.location.models import Location, LocationView
-        from hi.integrations.sync_result import IntegrationSyncResult
+        from hi.integrations.connect.sync_result import IntegrationSyncResult
 
         self.integration = Integration.objects.create(
             integration_id=self.INTEGRATION_ID,
@@ -751,10 +747,10 @@ class PlacementFlowTests(SyncViewTestCase):
         self.assertSuccessResponse(response)
         body = response.content.decode()
         # Result-modal markers (NOT placement markers).
-        # Hero copy is is_initial_import-aware. Test setup leaves
+        # Hero copy is is_initial_connect-aware. Test setup leaves
         # Entity rows in the DB so the sync view sees this as a
-        # Refresh, not an Initial Import.
-        self.assertIn('Refresh complete', body)
+        # update check, not an Initial Connect.
+        self.assertIn('Update check complete', body)
         self.assertIn('Place Later', body)
         self.assertIn('Place 4 new items', body)
         self.assertIn(self._placement_url(), body)
@@ -767,7 +763,7 @@ class PlacementFlowTests(SyncViewTestCase):
         no 'Place items' CTA. Single centered OK is the only footer
         action (matches the project's 'acknowledge info, dismiss'
         single-button convention)."""
-        from hi.integrations.sync_result import IntegrationSyncResult
+        from hi.integrations.connect.sync_result import IntegrationSyncResult
         self.synchronizer._sync_result = IntegrationSyncResult(title='Empty')
         response = self.client.post(self._sync_url())
         self.assertSuccessResponse(response)
@@ -781,7 +777,7 @@ class PlacementFlowTests(SyncViewTestCase):
         placement when there are also creates — every change kind
         is enumerated in the result modal even though the modal
         ultimately routes the operator to placement."""
-        from hi.integrations.sync_result import IntegrationSyncResult
+        from hi.integrations.connect.sync_result import IntegrationSyncResult
         self.synchronizer._sync_result = IntegrationSyncResult(
             title='Mixed Result',
             created_list=['Brand New Light'],
@@ -967,7 +963,7 @@ class PlacementDismissAndShowTests(SyncViewTestCase):
         from hi.apps.entity.enums import EntityType
         from hi.apps.entity.models import Entity
         from hi.apps.location.models import Location, LocationView
-        from hi.integrations.sync_result import IntegrationSyncResult
+        from hi.integrations.connect.sync_result import IntegrationSyncResult
 
         self.integration = Integration.objects.create(
             integration_id=self.INTEGRATION_ID,
@@ -1041,11 +1037,11 @@ class PlacementDismissAndShowTests(SyncViewTestCase):
         """The placement form's NOT NOW button (action=dismiss)
         routes back to the same placement URL where the view's
         POST handler renders the confirmation modal. GO BACK links
-        to the placement GET with is_initial_import threaded
+        to the placement GET with is_initial_connect threaded
         through."""
         response = self.client.post(self._placement_url(), {
             'action': 'dismiss',
-            'is_initial_import': '1',
+            'is_initial_connect': '1',
         })
         self.assertSuccessResponse(response)
         body = response.content.decode()
@@ -1053,8 +1049,8 @@ class PlacementDismissAndShowTests(SyncViewTestCase):
         self.assertIn('Items left unplaced', body)
         self.assertIn('GO BACK', body)
         self.assertIn('OK, PLACE LATER', body)
-        # GO BACK targets the placement GET with is_initial_import=1.
-        self.assertIn(self._placement_url() + '?is_initial_import=1', body)
+        # GO BACK targets the placement GET with is_initial_connect=1.
+        self.assertIn(self._placement_url() + '?is_initial_connect=1', body)
 
     def test_placement_get_renders_from_unplaced_entities(self):
         """The GET placement queries entities for the integration
@@ -1300,7 +1296,7 @@ class IntegrationManageViewSyncCheckContextTests(SyncViewTestCase):
         )
 
     def test_banner_renders_when_sync_check_reports_drift(self):
-        from hi.integrations.sync_check import (
+        from hi.integrations.connect.sync_check import (
             IntegrationSyncCheck,
             SyncDelta,
         )
@@ -1320,15 +1316,15 @@ class IntegrationManageViewSyncCheckContextTests(SyncViewTestCase):
         self.assertSuccessResponse(response)
         body = response.content.decode()
         self.assertIn('1 new item upstream', body)
-        # The "REFRESH" call-to-action is rendered as an inline
-        # anchor that links to the pre-sync modal, so the rendered
-        # HTML carries both the link text and the URL.
+        # The "Update" call-to-action is rendered as an
+        # inline anchor that links to the pre-sync modal, so the
+        # rendered HTML carries both the link text and the URL.
         self.assertIn(
             reverse('integrations_pre_sync',
                     kwargs={'integration_id': self.INTEGRATION_ID}),
             body,
         )
-        self.assertIn('>REFRESH</a>', body)
+        self.assertIn('>Update</a>', body)
 
     def _refresh_link_url(self):
         return reverse(
@@ -1349,7 +1345,7 @@ class IntegrationManageViewSyncCheckContextTests(SyncViewTestCase):
     def test_no_banner_when_in_sync(self):
         # Probe has run and confirmed in-sync (zero-delta); the
         # banner is gated on needs_sync, so it must not appear.
-        from hi.integrations.sync_check import IntegrationSyncCheck
+        from hi.integrations.connect.sync_check import IntegrationSyncCheck
         IntegrationSyncCheck.record_sync_complete(
             integration_id=self.INTEGRATION_ID,
             integration_label='Sync View Test Integration',

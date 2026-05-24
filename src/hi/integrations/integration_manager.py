@@ -3,7 +3,7 @@ import asyncio
 import json
 import logging
 import threading
-from typing import Dict, List
+from typing import Dict, FrozenSet, List, Optional
 
 from django.apps import apps
 from django.conf import settings
@@ -18,11 +18,11 @@ from hi.apps.common.module_utils import import_module_safe
 from hi.apps.entity.models import Entity
 from hi.apps.system.health_status_provider import HealthStatusProvider
 
-from .entity_operations import EntityIntegrationOperations
-from .enums import IntegrationAttributeType, IntegrationDisableMode
+from .connect.entity_operations import EntityIntegrationOperations
+from .enums import IntegrationAttributeType, IntegrationCapability, IntegrationDisableMode
 from .exceptions import IntegrationConnectionError
-from .integration_data import IntegrationData
-from .integration_gateway import IntegrationGateway
+from .connect.integration_data import IntegrationData
+from .connect.integration_gateway import IntegrationGateway
 from .transient_models import IntegrationKey
 from .models import Integration, IntegrationAttribute
 from .transient_models import IntegrationMetaData
@@ -35,7 +35,7 @@ class IntegrationManager( Singleton ):
     START_DELAY_INTERVAL_SECS = 2
 
     # Bounded timeout (in seconds) used when an integration's gateway
-    # test_connection() probe is invoked synchronously during attribute-save
+    # validate_access() probe is invoked synchronously during attribute-save
     # validation or before relaunching monitors. Kept short for interactive
     # save-time UX; can be promoted to a user-tunable setting later if
     # demand emerges.
@@ -68,18 +68,34 @@ class IntegrationManager( Singleton ):
             sync_check_monitor.stop()
         return
 
-    def get_integration_data_list( self, enabled_only = False ) -> List[ IntegrationData ]:
+    def get_integration_data_list(
+            self,
+            enabled_only : bool                                            = False,
+            capabilities : Optional[ FrozenSet[ IntegrationCapability ] ]  = None,
+    ) -> List[ IntegrationData ]:
         if enabled_only:
             integration_data_list = [ x for x in self._integration_data_map.values() if x.is_enabled ]
         else:
             integration_data_list = list( self._integration_data_map.values() )
-
+        if capabilities is not None:
+            integration_data_list = [
+                x for x in integration_data_list
+                if x.integration_metadata.capabilities & capabilities
+            ]
         integration_data_list.sort( key = lambda data : data.integration_metadata.label )
         return integration_data_list
-    
-    def get_default_integration_data( self ) -> IntegrationData:
+
+    def get_default_integration_data(
+            self,
+            capabilities : Optional[ FrozenSet[ IntegrationCapability ] ]  = None,
+    ) -> IntegrationData:
         enabled_integration_data_list = [ x for x in self._integration_data_map.values()
                                           if x.is_enabled ]
+        if capabilities is not None:
+            enabled_integration_data_list = [
+                x for x in enabled_integration_data_list
+                if x.integration_metadata.capabilities & capabilities
+            ]
         if not enabled_integration_data_list:
             return None
         enabled_integration_data_list.sort( key = lambda data : data.integration_metadata.label )
@@ -251,7 +267,7 @@ class IntegrationManager( Singleton ):
         # monitor module imports IntegrationManager lazily inside its
         # do_work, but the manager only needs the class here for
         # construction.
-        from .monitors import IntegrationSyncCheckMonitor
+        from .connect.monitors import IntegrationSyncCheckMonitor
 
         if settings.DEBUG and settings.SUPPRESS_MONITORS:
             logger.debug( 'Skipping sync-check monitor. See SUPPRESS_MONITORS = True' )
@@ -584,7 +600,7 @@ class IntegrationManager( Singleton ):
         _launch_integration_monitor_task is idempotent when the monitor is
         already running.
 
-        Probes upstream connectivity via the gateway's test_connection
+        Probes upstream connectivity via the gateway's validate_access
         before relaunching, so we fail fast (with a meaningful error to
         the caller) rather than spinning up monitors that will immediately
         error against an unreachable service. Raises
@@ -605,13 +621,13 @@ class IntegrationManager( Singleton ):
         integration_attributes = list(
             integration_data.integration.attributes.all()
         )
-        test_result = integration_data.integration_gateway.test_connection(
+        test_result = integration_data.integration_gateway.validate_access(
             integration_attributes = integration_attributes,
             timeout_secs = self.HEALTH_CHECK_TIMEOUT_SECS,
         )
         if not test_result.is_success:
             raise IntegrationConnectionError(
-                test_result.message or 'Connection test failed during resume.'
+                test_result.message or 'Access validation failed during resume.'
             )
 
         with self._data_lock:

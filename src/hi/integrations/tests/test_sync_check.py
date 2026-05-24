@@ -15,13 +15,13 @@ from unittest.mock import Mock, patch
 from django.core.cache import cache
 from django.test import TestCase
 
-from hi.integrations.sync_check import (
+from hi.integrations.connect.sync_check import (
     IntegrationSyncCheck,
     SyncCheckOutcome,
     SyncCheckResult,
     SyncDelta,
 )
-from hi.integrations.monitors import IntegrationSyncCheckMonitor
+from hi.integrations.connect.monitors import IntegrationSyncCheckMonitor
 from hi.integrations.transient_models import IntegrationKey
 
 
@@ -131,10 +131,11 @@ class BuildResultAndSummaryTests(TestCase):
             integration_label='Home Assistant',
         )
         self.assertIn('3 new items upstream', result.summary_message)
-        # The Refresh call-to-action is intentionally NOT in the
-        # summary string — it is rendered as a real link by the
+        # The update-check call-to-action is intentionally NOT in
+        # the summary string — it is rendered as a real link by the
         # manage-page banner template.
-        self.assertNotIn('REFRESH', result.summary_message)
+        self.assertNotIn('UPDATE', result.summary_message)
+        self.assertNotIn('Update', result.summary_message)
 
     def test_singular_pluralization(self):
         result = IntegrationSyncCheck.build_result(
@@ -231,6 +232,20 @@ class CacheHelperTests(TestCase):
         )
         IntegrationSyncCheck.clear_state('')
         # No exceptions; nothing to assert beyond reaching here.
+
+    def test_unreadable_cache_entry_is_evicted_and_returns_none(self):
+        # A pickled entry written before a class rename / module move
+        # will fail to deserialize on read. The defensive guard in
+        # get_state must catch, evict the bad key, and degrade to a
+        # cache miss rather than propagate the exception.
+        cache_key = IntegrationSyncCheck._cache_key(self.INTEGRATION_A)
+        with patch.object(cache, 'get', side_effect=ModuleNotFoundError(
+                "No module named 'hi.integrations.old_path'")):
+            with patch.object(cache, 'delete') as mock_delete:
+                self.assertIsNone(
+                    IntegrationSyncCheck.get_state(self.INTEGRATION_A),
+                )
+                mock_delete.assert_called_once_with(cache_key)
 
     def test_record_sync_complete_writes_zero_delta_with_timestamp(self):
         # Pre-populate a stale "needs sync" state.
@@ -643,7 +658,7 @@ class IntegrationSynchronizerPostSyncHookTests(TestCase):
         returns the given result. We test sync() (the public entry
         point) so the post-hook fires the same way it does in
         production."""
-        from hi.integrations.integration_synchronizer import IntegrationSynchronizer
+        from hi.integrations.connect.integration_synchronizer import IntegrationSynchronizer
         from hi.integrations.transient_models import IntegrationMetaData
 
         class _TestSynchronizer(IntegrationSynchronizer):
@@ -657,13 +672,13 @@ class IntegrationSynchronizerPostSyncHookTests(TestCase):
                     allow_entity_deletion=True,
                 )
 
-            def _sync_impl(self, is_initial_import):
+            def _sync_impl(self, is_initial_connect):
                 return sync_impl_result
 
         return _TestSynchronizer()
 
     def test_successful_sync_records_zero_delta_completion(self):
-        from hi.integrations.sync_result import IntegrationSyncResult
+        from hi.integrations.connect.sync_result import IntegrationSyncResult
 
         # Pre-populate a stale "needs sync" state.
         IntegrationSyncCheck.set_state(
@@ -674,17 +689,17 @@ class IntegrationSynchronizerPostSyncHookTests(TestCase):
             ),
         )
         synchronizer = self._make_synchronizer(
-            sync_impl_result=IntegrationSyncResult(title='Refresh Result'),
+            sync_impl_result=IntegrationSyncResult(title='Update Check Result'),
         )
 
-        synchronizer.sync(is_initial_import=False)
+        synchronizer.sync(is_initial_connect=False)
 
         loaded = IntegrationSyncCheck.get_state(self.INTEGRATION_ID)
         self.assertIsNotNone(loaded)
         self.assertFalse(loaded.needs_sync)
 
     def test_failed_sync_leaves_cache_alone(self):
-        from hi.integrations.sync_result import IntegrationSyncResult
+        from hi.integrations.connect.sync_result import IntegrationSyncResult
 
         # Pre-populate a stale needs-sync state.
         stale = IntegrationSyncCheck.build_result(
@@ -697,12 +712,12 @@ class IntegrationSynchronizerPostSyncHookTests(TestCase):
         )
         synchronizer = self._make_synchronizer(
             sync_impl_result=IntegrationSyncResult(
-                title='Refresh Result',
+                title='Update Check Result',
                 error_list=['something went wrong'],
             ),
         )
 
-        synchronizer.sync(is_initial_import=False)
+        synchronizer.sync(is_initial_connect=False)
 
         loaded = IntegrationSyncCheck.get_state(self.INTEGRATION_ID)
         self.assertIsNotNone(loaded)

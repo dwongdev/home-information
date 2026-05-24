@@ -14,15 +14,19 @@ from hi.apps.entity.models import Entity, EntityAttribute, EntityState
 from hi.apps.event.models import EventClause, EventDefinition
 from hi.integrations.exceptions import IntegrationConnectionError
 from hi.integrations.integration_manager import IntegrationManager
-from hi.integrations.integration_data import IntegrationData
-from hi.integrations.integration_gateway import IntegrationGateway
+from hi.integrations.connect.integration_data import IntegrationData
+from hi.integrations.connect.integration_gateway import IntegrationGateway
 from hi.integrations.models import Integration, IntegrationAttribute
 from hi.integrations.transient_models import (
     ConnectionTestResult,
     IntegrationMetaData,
     IntegrationKey,
 )
-from hi.integrations.enums import IntegrationAttributeType, IntegrationDisableMode
+from hi.integrations.enums import (
+    IntegrationAttributeType,
+    IntegrationCapability,
+    IntegrationDisableMode,
+)
 
 logging.disable(logging.CRITICAL)
 
@@ -37,14 +41,18 @@ class MockIntegrationGateway(IntegrationGateway):
     """Mock integration gateway for testing."""
 
     def __init__(self, integration_id='test_integration', label='Test Integration',
-                 connection_test_result=None):
+                 connection_test_result=None, capabilities=None):
         self.integration_id = integration_id
         self.label = label
         # Default to a passing probe so existing resume/pause tests don't
-        # need to know about the new test_connection step.
+        # need to know about the new validate_access step.
         self.connection_test_result = (
             connection_test_result if connection_test_result is not None
             else ConnectionTestResult.success()
+        )
+        self.capabilities = (
+            capabilities if capabilities is not None
+            else frozenset({ IntegrationCapability.CONNECT })
         )
 
     def get_metadata(self):
@@ -52,7 +60,8 @@ class MockIntegrationGateway(IntegrationGateway):
             integration_id=self.integration_id,
             label=self.label,
             attribute_type=MockIntegrationAttributeType,
-            allow_entity_deletion=True
+            allow_entity_deletion=True,
+            capabilities=self.capabilities,
         )
 
     def get_manage_view_pane(self):
@@ -64,7 +73,7 @@ class MockIntegrationGateway(IntegrationGateway):
     def get_controller(self):
         return Mock()
 
-    def test_connection(self, integration_attributes, timeout_secs):
+    def validate_access(self, integration_attributes, timeout_secs):
         return self.connection_test_result
 
 
@@ -172,6 +181,62 @@ class IntegrationManagerTestCase(TestCase):
         self.assertEqual(len(enabled_integrations), 2)
         self.assertEqual([data.integration_id for data in enabled_integrations],
                          ['beta_integration', 'zebra_integration'])
+
+    def test_integration_data_list_capability_filter(self):
+        manager = IntegrationManager()
+
+        connect_int = Integration.objects.create(
+            integration_id='connect_int', is_enabled=True,
+        )
+        import_int = Integration.objects.create(
+            integration_id='import_int', is_enabled=True,
+        )
+        both_int = Integration.objects.create(
+            integration_id='both_int', is_enabled=True,
+        )
+
+        manager._integration_data_map = {
+            'connect_int': IntegrationData(
+                integration_gateway=MockIntegrationGateway(
+                    'connect_int', 'Connect Service',
+                    capabilities=frozenset({ IntegrationCapability.CONNECT }),
+                ),
+                integration=connect_int,
+            ),
+            'import_int': IntegrationData(
+                integration_gateway=MockIntegrationGateway(
+                    'import_int', 'Import Service',
+                    capabilities=frozenset({ IntegrationCapability.IMPORT }),
+                ),
+                integration=import_int,
+            ),
+            'both_int': IntegrationData(
+                integration_gateway=MockIntegrationGateway(
+                    'both_int', 'Both Service',
+                    capabilities=frozenset({
+                        IntegrationCapability.CONNECT,
+                        IntegrationCapability.IMPORT,
+                    }),
+                ),
+                integration=both_int,
+            ),
+        }
+
+        connect_filtered = manager.get_integration_data_list(
+            capabilities=frozenset({ IntegrationCapability.CONNECT }),
+        )
+        self.assertEqual(
+            sorted([d.integration_id for d in connect_filtered]),
+            ['both_int', 'connect_int'],
+        )
+
+        import_filtered = manager.get_integration_data_list(
+            capabilities=frozenset({ IntegrationCapability.IMPORT }),
+        )
+        self.assertEqual(
+            sorted([d.integration_id for d in import_filtered]),
+            ['both_int', 'import_int'],
+        )
 
     def test_get_default_integration_data(self):
         """Test default integration selection logic."""
@@ -975,7 +1040,7 @@ class IntegrationManagerTestCase(TestCase):
             self.assertTrue(integration.is_paused)
 
     def test_resume_integration_passes_bounded_timeout_to_gateway(self):
-        """Resume must invoke test_connection with the configured bounded timeout."""
+        """Resume must invoke validate_access with the configured bounded timeout."""
         manager = IntegrationManager()
         manager.reset_for_testing()
 
@@ -987,7 +1052,7 @@ class IntegrationManagerTestCase(TestCase):
         gateway = MockIntegrationGateway('resume_timeout_test')
         data = IntegrationData(integration_gateway=gateway, integration=integration)
 
-        with patch.object(gateway, 'test_connection',
+        with patch.object(gateway, 'validate_access',
                           return_value=ConnectionTestResult.success()) as mock_probe:
             with patch.object(manager, '_launch_integration_monitor_task'):
                 manager.resume_integration(data)
@@ -1016,7 +1081,7 @@ class IntegrationManagerTestCase(TestCase):
         data = IntegrationData(integration_gateway=gateway, integration=integration)
 
         # Simulate a concurrent disable that lands BETWEEN the lock-free
-        # probe and the lock-acquired state mutation. test_connection's
+        # probe and the lock-acquired state mutation. validate_access's
         # side_effect mutates the DB row to is_enabled=False right before
         # returning success, then resume_integration's inside-lock
         # refresh_from_db() picks that up.
@@ -1025,7 +1090,7 @@ class IntegrationManagerTestCase(TestCase):
             integration.save()
             return ConnectionTestResult.success()
 
-        with patch.object(gateway, 'test_connection',
+        with patch.object(gateway, 'validate_access',
                           side_effect=disable_during_probe):
             with patch.object(manager, '_launch_integration_monitor_task') as mock_launch:
                 with self.assertRaises(IntegrationConnectionError) as context:

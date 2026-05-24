@@ -6,10 +6,10 @@ from hi.apps.entity.transient_models import VideoSnapshot
 from hi.apps.system.enums import HealthStatusType
 from hi.apps.system.health_status_provider import HealthStatusProvider
 
-from hi.integrations.integration_controller import IntegrationController
-from hi.integrations.integration_gateway import IntegrationGateway
-from hi.integrations.integration_manage_view_pane import IntegrationManageViewPane
-from hi.integrations.integration_synchronizer import IntegrationSynchronizer
+from hi.integrations.connect.integration_controller import IntegrationController
+from hi.integrations.connect.integration_gateway import IntegrationGateway
+from hi.integrations.connect.integration_manage_view_pane import IntegrationManageViewPane
+from hi.integrations.connect.integration_synchronizer import IntegrationSynchronizer
 from hi.integrations.models import IntegrationAttribute
 from hi.integrations.transient_models import (
     ConnectionTestResult,
@@ -74,21 +74,21 @@ class HassGateway( IntegrationGateway ):
                 error_message=f'Configuration validation failed: {e}'
             )
 
-    def test_connection(
+    def validate_access(
             self,
             integration_attributes: List[IntegrationAttribute],
             timeout_secs: Optional[float],
     ) -> ConnectionTestResult:
-        """Live connection probe; delegates to HassManager."""
+        """Live access validation probe; delegates to HassManager."""
         try:
             hass_manager = HassManager()
-            return hass_manager.test_connection(
+            return hass_manager.validate_access(
                 integration_attributes=integration_attributes,
                 timeout_secs=timeout_secs,
             )
         except Exception as e:
-            logger.exception(f'Error in HASS connection test: {e}')
-            return ConnectionTestResult.failure(f'Connection test error: {e}')
+            logger.exception(f'Error in HASS access validation: {e}')
+            return ConnectionTestResult.failure(f'Access validation error: {e}')
 
     def get_entity_video_snapshot(self, entity: Entity) -> Optional[VideoSnapshot]:
         if not entity.has_video_snapshot:

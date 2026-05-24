@@ -65,17 +65,17 @@ get wrong (scheme, port, path suffix, trailing slash).
 ## Setup walkthrough
 
 What the user does in HI to enable the integration once they have
-their credentials, and what to expect on the first **Import**. Keep
+their credentials, and what to expect on the first **Connect**. Keep
 this brief — it is mostly continuity from the previous section into
-the post-import state.
+the post-connect state.
 
 The standard first step is opening HI's integration picker — link
 back to [Enabling an integration](../Integrations.md#enabling-an-integration)
 for the conditional UI flow rather than restating it here, so a UI
 change only needs to be reflected in one place.
 
-Use the user-facing terms: **Import** for the first run and
-**Refresh** for subsequent runs (matching the modal labels). Avoid
+Use the user-facing terms: **Connect** for the first run and
+**Update** for subsequent runs (matching the button labels). Avoid
 "sync" in user-facing copy.
 
 ## Troubleshooting

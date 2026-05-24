@@ -32,7 +32,7 @@ from django.core.cache import cache
 import hi.apps.common.datetimeproxy as datetimeproxy
 from hi.apps.common.enums import LabeledEnum
 
-from .transient_models import IntegrationKey
+from hi.integrations.transient_models import IntegrationKey
 
 logger = logging.getLogger(__name__)
 
@@ -141,10 +141,31 @@ class IntegrationSyncCheck:
     @classmethod
     def get_state( cls, integration_id : str ) -> Optional[ SyncCheckResult ]:
         """Return the most recent cached result, or None if no probe
-        has written one (or the entry has expired)."""
+        has written one (or the entry has expired).
+
+        Tolerates unreadable cache entries. The cached value is a
+        pickled dataclass, which means a class rename, module move,
+        or shape change can make existing entries fail to deserialize
+        in-place. Without a guard, every read of a stale entry would
+        propagate the unpickle exception out through the manage page.
+        Catch broadly, evict the bad key so the next request runs
+        clean, and degrade to a cache miss — the next probe cycle (or
+        a successful Refresh) writes fresh state."""
         if not integration_id:
             return None
-        return cache.get( cls._cache_key( integration_id ) )
+        cache_key = cls._cache_key( integration_id )
+        try:
+            return cache.get( cache_key )
+        except Exception as e:
+            logger.warning(
+                f'sync-check cache entry unreadable for {integration_id}: '
+                f'{e}; evicting and treating as miss'
+            )
+            try:
+                cache.delete( cache_key )
+            except Exception:
+                pass
+            return None
 
     @classmethod
     def set_state( cls,
@@ -231,7 +252,7 @@ class IntegrationSyncCheck:
         from hi.apps.security.enums import SecurityLevel
         from hi.apps.sense.transient_models import SensorResponse
 
-        from .transient_models import IntegrationKey
+        from hi.integrations.transient_models import IntegrationKey
 
         alarm_integration_key = IntegrationKey(
             integration_id = 'integrations',
@@ -317,8 +338,8 @@ class IntegrationSyncCheck:
     def _summary_message( delta             : SyncDelta,
                           integration_label : str ) -> str:
         """Pure-information summary of the most recent check. The
-        Refresh call-to-action is rendered as a real link by the
-        manage-page banner template (so clicking it opens the
+        update-check call-to-action is rendered as a real link by
+        the manage-page banner template (so clicking it opens the
         pre-sync modal); it is intentionally not embedded in this
         string. The same string flows into the sidebar tooltip,
         where a "click here" suffix would be misleading."""
