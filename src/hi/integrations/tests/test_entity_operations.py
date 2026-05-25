@@ -3,7 +3,7 @@ Unit tests for EntityIntegrationOperations.
 
 Only covers behavior that encodes real classification / transformation /
 graph-traversal logic. The preserve_with_user_data path is already tested
-indirectly via test_integration_synchronizer (which exercises
+indirectly via test_integration_connector (which exercises
 _remove_entity_intelligently).
 """
 
@@ -15,7 +15,7 @@ from hi.apps.attribute.enums import AttributeType, AttributeValueType
 from hi.apps.entity.models import Entity, EntityAttribute, EntityState, EntityStateDelegation
 from hi.apps.event.models import EventClause, EventDefinition
 from hi.apps.sense.models import Sensor
-from hi.integrations.connect.entity_operations import EntityIntegrationOperations
+from hi.integrations.entity_operations import EntityIntegrationOperations
 
 logging.disable(logging.CRITICAL)
 
@@ -388,7 +388,7 @@ class FindReconnectCandidatesTests(TestCase):
         )
         upstream_key = self._make_upstream_key('light.kitchen')
 
-        from hi.integrations.connect.sync_result import IntegrationSyncResult
+        from hi.integrations.connector.sync_result import IntegrationSyncResult
         result = IntegrationSyncResult(title='Test')
 
         candidates = EntityIntegrationOperations.find_reconnect_candidates(
@@ -424,7 +424,7 @@ class FindReconnectCandidatesTests(TestCase):
         ambiguous_key = self._make_upstream_key('light.ambiguous')
         unmatched_key = self._make_upstream_key('light.never_existed')
 
-        from hi.integrations.connect.sync_result import IntegrationSyncResult
+        from hi.integrations.connector.sync_result import IntegrationSyncResult
         result = IntegrationSyncResult(title='Mixed')
 
         candidates = EntityIntegrationOperations.find_reconnect_candidates(

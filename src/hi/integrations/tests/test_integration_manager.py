@@ -14,8 +14,8 @@ from hi.apps.entity.models import Entity, EntityAttribute, EntityState
 from hi.apps.event.models import EventClause, EventDefinition
 from hi.integrations.exceptions import IntegrationConnectionError
 from hi.integrations.integration_manager import IntegrationManager
-from hi.integrations.connect.integration_data import IntegrationData
-from hi.integrations.connect.integration_gateway import IntegrationGateway
+from hi.integrations.integration_data import IntegrationData
+from hi.integrations.integration_gateway import IntegrationGateway
 from hi.integrations.models import Integration, IntegrationAttribute
 from hi.integrations.transient_models import (
     ConnectionTestResult,
@@ -63,15 +63,6 @@ class MockIntegrationGateway(IntegrationGateway):
             allow_entity_deletion=True,
             capabilities=self.capabilities,
         )
-
-    def get_manage_view_pane(self):
-        return Mock()
-
-    def get_monitor(self):
-        return Mock()
-
-    def get_controller(self):
-        return Mock()
 
     def validate_access(self, integration_attributes, timeout_secs):
         return self.connection_test_result

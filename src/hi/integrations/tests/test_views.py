@@ -8,9 +8,13 @@ from unittest.mock import Mock, patch
 from django.urls import reverse
 
 from hi.apps.attribute.enums import AttributeValueType
-from hi.integrations.enums import IntegrationAttributeType, IntegrationDisableMode
-from hi.integrations.connect.integration_data import IntegrationData
-from hi.integrations.connect.integration_gateway import IntegrationGateway
+from hi.integrations.enums import (
+    IntegrationAttributeType,
+    IntegrationCapability,
+    IntegrationDisableMode,
+)
+from hi.integrations.integration_data import IntegrationData
+from hi.integrations.integration_gateway import IntegrationGateway
 from hi.integrations.integration_manager import IntegrationManager
 from hi.integrations.models import Integration
 from hi.integrations.transient_models import IntegrationMetaData
@@ -35,15 +39,6 @@ class _PauseResumeTestGateway(IntegrationGateway):
             attribute_type=_PauseResumeTestAttributeType,
             allow_entity_deletion=True,
         )
-
-    def get_manage_view_pane(self):
-        return Mock()
-
-    def get_monitor(self):
-        return Mock()
-
-    def get_controller(self):
-        return Mock()
 
 
 class PauseResumeViewTests(SyncViewTestCase):
@@ -194,7 +189,7 @@ class RemoveViewTests(SyncViewTestCase):
 class _SyncTestSynchronizer:
     """
     Stand-in synchronizer for pre-sync / sync view tests. Stays
-    intentionally minimal (does NOT extend IntegrationSynchronizer) to
+    intentionally minimal (does NOT extend IntegrationConnector) to
     avoid acquiring the real lock or running framework retry logic in
     unit tests; the views only need methods the framework actually
     calls on it.
@@ -210,8 +205,11 @@ class _SyncTestSynchronizer:
     def get_result_title(self, is_initial_connect):
         return 'Test Sync Result'
 
+    def get_health_status_provider(self):
+        return _SyncTestHealthStatusProvider()
+
     def sync(self, is_initial_connect=False, preserve_user_data=True):
-        from hi.integrations.connect.sync_result import IntegrationSyncResult
+        from hi.integrations.connector.sync_result import IntegrationSyncResult
         self.sync_called = True
         self.last_preserve_user_data = preserve_user_data
         return IntegrationSyncResult(
@@ -232,10 +230,15 @@ class _SyncTestHealthStatusProvider:
 class _SyncCapableGateway(IntegrationGateway):
     """Gateway that provides a synchronizer + health provider."""
 
-    def __init__(self, integration_id='sync_view_test', synchronizer=None):
+    def __init__(self, integration_id='sync_view_test', synchronizer=None,
+                 capabilities=None):
         self.integration_id = integration_id
         self._synchronizer = (
             synchronizer if synchronizer is not None else _SyncTestSynchronizer()
+        )
+        self._capabilities = (
+            capabilities if capabilities is not None
+            else frozenset({ IntegrationCapability.CONNECT })
         )
 
     def get_metadata(self):
@@ -244,22 +247,11 @@ class _SyncCapableGateway(IntegrationGateway):
             label='Sync View Test Integration',
             attribute_type=_PauseResumeTestAttributeType,
             allow_entity_deletion=True,
+            capabilities=self._capabilities,
         )
 
-    def get_manage_view_pane(self):
-        return Mock()
-
-    def get_monitor(self):
-        return Mock()
-
-    def get_controller(self):
-        return Mock()
-
-    def get_synchronizer(self):
+    def get_connector(self):
         return self._synchronizer
-
-    def get_health_status_provider(self):
-        return _SyncTestHealthStatusProvider()
 
 
 class _SyncIncapableGateway(IntegrationGateway):
@@ -275,15 +267,6 @@ class _SyncIncapableGateway(IntegrationGateway):
             attribute_type=_PauseResumeTestAttributeType,
             allow_entity_deletion=True,
         )
-
-    def get_manage_view_pane(self):
-        return Mock()
-
-    def get_monitor(self):
-        return Mock()
-
-    def get_controller(self):
-        return Mock()
 
 
 class PreSyncViewTests(SyncViewTestCase):
@@ -331,7 +314,7 @@ class PreSyncViewTests(SyncViewTestCase):
 
     def test_get_404s_when_integration_has_no_synchronizer(self):
         # Replace the integration_data with one whose gateway returns
-        # None from get_synchronizer.
+        # None from get_connector.
         IntegrationManager()._integration_data_map[self.INTEGRATION_ID] = IntegrationData(
             integration_gateway=_SyncIncapableGateway(self.INTEGRATION_ID),
             integration=self.integration,
@@ -341,7 +324,7 @@ class PreSyncViewTests(SyncViewTestCase):
 
     def test_review_config_action_never_rendered(self):
         """The first-time CONNECT path is collapsed into
-        IntegrationEnableView (Phase 7); pre-sync is now only the
+        ConnectorConfigureView (Phase 7); pre-sync is now only the
         update-check path. REVIEW CONFIG was an artifact of the
         first-time round-trip and must no longer render anywhere
         in this template."""
@@ -467,13 +450,13 @@ class SyncViewTests(SyncViewTestCase):
 
 
 # --------------------------------------------------------------------------
-# IntegrationEnableView tests for the Review Config (post-enable) path
+# ConnectorConfigureView tests for the Review Config (post-enable) path
 # --------------------------------------------------------------------------
 
 
 class EnableViewTests(SyncViewTestCase):
     """
-    IntegrationEnableView: Phase 7 collapse. The view renders the
+    ConnectorConfigureView: Phase 7 collapse. The view renders the
     config form with a CONNECT action button regardless of the
     integration's is_enabled state; the legacy review-mode round
     trip (UPDATE label + CONTINUE-to-pre-sync) is gone.
@@ -497,7 +480,7 @@ class EnableViewTests(SyncViewTestCase):
 
     def _url(self):
         return reverse(
-            'integrations_enable',
+            'integrations_connect_configure',
             kwargs={'integration_id': self.INTEGRATION_ID},
         )
 
@@ -520,6 +503,20 @@ class EnableViewTests(SyncViewTestCase):
         self.assertSuccessResponse(response)
         body = response.content.decode()
         self.assertIn('CONNECT', body)
+
+    def test_initial_connect_not_blocked_for_single_capability(self):
+        # Default _SyncCapableGateway is Connect-only; no block fires.
+        from hi.apps.entity.enums import EntityType
+        from hi.apps.entity.models import Entity
+        Entity.objects.create(
+            previous_integration_id=self.INTEGRATION_ID,
+            previous_integration_name='stray-internal',
+            name='Stray',
+            entity_type_str=str(EntityType.OTHER),
+        )
+        response = self.client.get(self._url())
+        body = response.content.decode()
+        self.assertNotIn('Cannot configure', body)
         self.assertIn('hi-modal-cancel', body)
 
     def test_post_enables_and_runs_sync_when_synchronizer_exists(self):
@@ -530,9 +527,9 @@ class EnableViewTests(SyncViewTestCase):
         # under test is the enable → sync chain plus the sync-result
         # modal render.
         from django.http import HttpResponse
-        from hi.integrations.connect.views import IntegrationEnableView
+        from hi.integrations.connector.views import ConnectorConfigureView
         with patch.object(
-                IntegrationEnableView, 'post_attribute_form',
+                ConnectorConfigureView, 'post_attribute_form',
                 return_value=HttpResponse(status=200),
         ):
             response = self.client.post(self._url(), {})
@@ -550,9 +547,9 @@ class EnableViewTests(SyncViewTestCase):
             integration=self.integration,
         )
         from django.http import HttpResponse
-        from hi.integrations.connect.views import IntegrationEnableView
+        from hi.integrations.connector.views import ConnectorConfigureView
         with patch.object(
-                IntegrationEnableView, 'post_attribute_form',
+                ConnectorConfigureView, 'post_attribute_form',
                 return_value=HttpResponse(status=200),
         ):
             response = self.client.post(self._url(), {})
@@ -584,6 +581,9 @@ class _PlacementTestSynchronizer:
     def get_result_title(self, is_initial_connect):
         return 'Placement Test'
 
+    def get_health_status_provider(self):
+        return Mock()
+
     def sync(self, is_initial_connect=False, preserve_user_data=True):
         self.sync_called = True
         self.last_preserve_user_data = preserve_user_data
@@ -605,20 +605,8 @@ class _PlacementTestGateway(IntegrationGateway):
             allow_entity_deletion=True,
         )
 
-    def get_manage_view_pane(self):
-        return Mock()
-
-    def get_monitor(self):
-        return Mock()
-
-    def get_controller(self):
-        return Mock()
-
-    def get_synchronizer(self):
+    def get_connector(self):
         return self._synchronizer
-
-    def get_health_status_provider(self):
-        return Mock()
 
 
 class PlacementFlowTests(SyncViewTestCase):
@@ -639,7 +627,7 @@ class PlacementFlowTests(SyncViewTestCase):
         from hi.apps.entity.enums import EntityType
         from hi.apps.entity.models import Entity
         from hi.apps.location.models import Location, LocationView
-        from hi.integrations.connect.sync_result import IntegrationSyncResult
+        from hi.integrations.connector.sync_result import IntegrationSyncResult
 
         self.integration = Integration.objects.create(
             integration_id=self.INTEGRATION_ID,
@@ -752,7 +740,7 @@ class PlacementFlowTests(SyncViewTestCase):
         # update check, not an Initial Connect.
         self.assertIn('Update check complete', body)
         self.assertIn('Place Later', body)
-        self.assertIn('Place 4 new items', body)
+        self.assertIn('Place new items', body)
         self.assertIn(self._placement_url(), body)
         # No placement artifacts in the response — operator must
         # click the CTA to reach the placement.
@@ -763,7 +751,7 @@ class PlacementFlowTests(SyncViewTestCase):
         no 'Place items' CTA. Single centered OK is the only footer
         action (matches the project's 'acknowledge info, dismiss'
         single-button convention)."""
-        from hi.integrations.connect.sync_result import IntegrationSyncResult
+        from hi.integrations.connector.sync_result import IntegrationSyncResult
         self.synchronizer._sync_result = IntegrationSyncResult(title='Empty')
         response = self.client.post(self._sync_url())
         self.assertSuccessResponse(response)
@@ -777,7 +765,7 @@ class PlacementFlowTests(SyncViewTestCase):
         placement when there are also creates — every change kind
         is enumerated in the result modal even though the modal
         ultimately routes the operator to placement."""
-        from hi.integrations.connect.sync_result import IntegrationSyncResult
+        from hi.integrations.connector.sync_result import IntegrationSyncResult
         self.synchronizer._sync_result = IntegrationSyncResult(
             title='Mixed Result',
             created_list=['Brand New Light'],
@@ -793,7 +781,7 @@ class PlacementFlowTests(SyncViewTestCase):
         self.assertIn('Old Name → New Name', body)
         self.assertIn('Stale Sensor', body)
         # And the CTA still routes to the placement.
-        self.assertIn('Place 1 new item', body)
+        self.assertIn('Place new items', body)
 
     def test_placement_top_inherits_to_groups_and_entities(self):
         """Top view chosen, groups + entities at default → every
@@ -963,7 +951,7 @@ class PlacementDismissAndShowTests(SyncViewTestCase):
         from hi.apps.entity.enums import EntityType
         from hi.apps.entity.models import Entity
         from hi.apps.location.models import Location, LocationView
-        from hi.integrations.connect.sync_result import IntegrationSyncResult
+        from hi.integrations.connector.sync_result import IntegrationSyncResult
 
         self.integration = Integration.objects.create(
             integration_id=self.INTEGRATION_ID,
@@ -1233,30 +1221,7 @@ class RefineViewTests(SyncViewTestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class _RenderableManageViewPane:
-    """Minimal stand-in for an IntegrationManageViewPane that points
-    at an existing empty per-integration template so the manage view
-    can render in tests without a real per-integration pane wired
-    in. Reuses ``homebox/panes/hb_manage.html`` (a documented empty
-    extension-point template) rather than introducing a test-only
-    template file."""
-
-    def get_template_name(self):
-        return 'homebox/panes/hb_manage.html'
-
-    def get_template_context(self, integration_data):
-        return {}
-
-
-class _RenderableGateway(_SyncCapableGateway):
-    """``_SyncCapableGateway`` plus a real ManageViewPane so the
-    full IntegrationManageView render path works."""
-
-    def get_manage_view_pane(self):
-        return _RenderableManageViewPane()
-
-
-class IntegrationManageViewSyncCheckContextTests(SyncViewTestCase):
+class ConnectorManageViewSyncCheckContextTests(SyncViewTestCase):
     """Issue #283 — wire-up tests for the sync-check state on the
     integration manage page. Pins:
       * banner renders when the active integration's cached
@@ -1278,7 +1243,7 @@ class IntegrationManageViewSyncCheckContextTests(SyncViewTestCase):
             is_enabled=True,
             is_paused=False,
         )
-        self.gateway = _RenderableGateway(integration_id=self.INTEGRATION_ID)
+        self.gateway = _SyncCapableGateway(integration_id=self.INTEGRATION_ID)
         IntegrationManager()._integration_data_map[self.INTEGRATION_ID] = IntegrationData(
             integration_gateway=self.gateway,
             integration=self.integration,
@@ -1291,12 +1256,12 @@ class IntegrationManageViewSyncCheckContextTests(SyncViewTestCase):
 
     def _url(self):
         return reverse(
-            'integrations_manage',
+            'integrations_connect_manage',
             kwargs={'integration_id': self.INTEGRATION_ID},
         )
 
     def test_banner_renders_when_sync_check_reports_drift(self):
-        from hi.integrations.connect.sync_check import (
+        from hi.integrations.connector.sync_check import (
             IntegrationSyncCheck,
             SyncDelta,
         )
@@ -1345,7 +1310,7 @@ class IntegrationManageViewSyncCheckContextTests(SyncViewTestCase):
     def test_no_banner_when_in_sync(self):
         # Probe has run and confirmed in-sync (zero-delta); the
         # banner is gated on needs_sync, so it must not appear.
-        from hi.integrations.connect.sync_check import IntegrationSyncCheck
+        from hi.integrations.connector.sync_check import IntegrationSyncCheck
         IntegrationSyncCheck.record_sync_complete(
             integration_id=self.INTEGRATION_ID,
             integration_label='Sync View Test Integration',

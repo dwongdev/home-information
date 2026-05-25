@@ -1,0 +1,123 @@
+{% extends "modals/action_2_with_cancel.html" %}
+{% load icons %}
+
+{% comment %}
+Pre-sync confirmation modal for the manage-page UPDATE 
+button. Not used for the first-time enable sync flow. The modal confirms
+intent and explains what the operation will do; it does NOT surface
+integration health.
+
+`is_initial_connect` is still threaded because the manage page can
+expose a CONNECT variant when the integration is enabled but has no
+attached entities (e.g., entities deleted post-enable). That path
+shares this template.
+
+When `removal_summary.has_mixed_state` (update-check path with at
+least one user-data entity present), the modal mirrors the disable
+modal's policy choice: RETAIN MISSING preserves dropped user-data
+items by detaching, REMOVE MISSING hard-deletes them. The summary is
+the integration's full footprint; the operator's choice expresses
+policy that applies at sync execution if any drops carry user data.
+
+The form is opened in `preamble` and closed in `postamble` so each
+action button is a plain `<button name="preserve_user_data" value=…>`
+on the same form (mirrors the integration_disable.html pattern).
+
+Context:
+  integration_data        : IntegrationData (required) — for label, id.
+  is_initial_connect       : bool (required) — True when no entities for
+                            this integration have been imported yet
+                            (initial CONNECT); False for subsequent
+                            update-check operations.
+  sync_description        : Optional[str] — per-integration text from
+                            IntegrationConnector.get_description.
+  sync_url                : str (required) — URL the form posts to.
+  removal_summary         : Optional[IntegrationRemovalSummary] —
+                            integration's user-data classification.
+                            None when no entities are attached. Drives
+                            the Retain / Remove choice on the
+                            update-check path.
+{% endcomment %}
+
+{% block preamble %}
+<form action="{{ sync_url }}" method="post" class="form" data-async="modal">
+  {% csrf_token %}
+{% endblock %}
+
+{% block title_text %}
+{% if is_initial_connect %}
+Connect to {{ integration_data.label }}?
+{% else %}
+Check {{ integration_data.label }} for updates?
+{% endif %}
+{% endblock %}
+
+{% block body %}
+{% if is_initial_connect %}
+<p>
+  Connect will pull items from <strong>{{ integration_data.label }}</strong>
+  into Home Information for the first time. Connected items can be
+  placed into your views in the next step.
+</p>
+{% else %}
+<p>
+  Checking for updates adds new items from
+  <strong>{{ integration_data.label }}</strong>, updates ones that
+  have changed, and removes ones no longer present.
+</p>
+{% if removal_summary.has_mixed_state %}
+<p>
+  This integration has <strong>{{ removal_summary.user_data_count }}</strong>
+  {% if removal_summary.user_data_count == 1 %}item{% else %}items{% endif %}
+  with custom data you've added. If an update would drop
+  {% if removal_summary.user_data_count == 1 %}that item{% else %}any of them{% endif %}:
+</p>
+<ul>
+  <li>
+    <strong>RETAIN MISSING</strong> — preserve any missing items with custom data
+    (detached from this integration; they will show as
+    <em>Detached from {{ integration_data.label }}</em> in the entity-detail UI,
+    with custom attributes and layout retained).
+  </li>
+  <li>
+    <strong>REMOVE MISSING</strong> — delete any missing items along with their
+    custom data. You will not be able to recover the deleted custom data.
+  </li>
+</ul>
+{% endif %}
+{% endif %}
+
+{% if sync_description %}
+<p class="text-muted">{{ sync_description }}</p>
+{% endif %}
+{% endblock %}
+
+{% block action_center %}
+{% if removal_summary.has_mixed_state %}
+<button type="submit" class="btn btn-outline-danger ml-2"
+        name="preserve_user_data" value="false">
+  {% icon "warning" size="sm" css_class="hi-icon-left" %}REMOVE MISSING
+</button>
+{% endif %}
+{% endblock %}
+
+{% block action_right %}
+{% if is_initial_connect %}
+<button type="submit" class="btn btn-primary">
+  {% icon "upload" size="lg" css_class="hi-icon-left" %}CONNECT
+</button>
+{% elif removal_summary.has_mixed_state %}
+<button type="submit" class="btn btn-primary"
+        name="preserve_user_data" value="true">
+  {% icon "shield" size="sm" css_class="hi-icon-left" %}RETAIN MISSING
+</button>
+{% else %}
+<button type="submit" class="btn btn-primary">
+  {% icon "sync" size="lg" css_class="hi-icon-left" %}UPDATE
+</button>
+{% endif %}
+{% endblock %}
+
+{% block postamble %}
+</form>
+{% endblock %}

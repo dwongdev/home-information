@@ -18,11 +18,11 @@ from hi.apps.common.module_utils import import_module_safe
 from hi.apps.entity.models import Entity
 from hi.apps.system.health_status_provider import HealthStatusProvider
 
-from .connect.entity_operations import EntityIntegrationOperations
+from .entity_operations import EntityIntegrationOperations
 from .enums import IntegrationAttributeType, IntegrationCapability, IntegrationDisableMode
 from .exceptions import IntegrationConnectionError
-from .connect.integration_data import IntegrationData
-from .connect.integration_gateway import IntegrationGateway
+from .integration_data import IntegrationData
+from .integration_gateway import IntegrationGateway
 from .transient_models import IntegrationKey
 from .models import Integration, IntegrationAttribute
 from .transient_models import IntegrationMetaData
@@ -121,7 +121,10 @@ class IntegrationManager( Singleton ):
                                           provider_id : str ) -> HealthStatusProvider:
         with self._data_lock:
             for integration in self._integration_data_map.values():
-                provider = integration.integration_gateway.get_health_status_provider()
+                connector = integration.integration_gateway.get_connector()
+                if connector is None:
+                    continue
+                provider = connector.get_health_status_provider()
                 if provider.get_provider_info().provider_id == provider_id:
                     return provider
                 continue
@@ -255,10 +258,10 @@ class IntegrationManager( Singleton ):
         """
         Start the framework-level sync-check monitor (Issue #283). Singular
         across all integrations: iterates enabled+unpaused integrations,
-        gets each integration's synchronizer via gateway.get_synchronizer(),
+        gets each integration's connector via gateway.get_connector(),
         and dispatches to its check_needs_sync. Sync-check rides on the
         same opt-in surface as full sync — integrations without a
-        synchronizer naturally opt out. Started after the per-integration
+        connector naturally opt out. Started after the per-integration
         health monitors so the integration data map is already populated;
         per-integration probe failures inside the cycle are caught
         individually so a not-yet-ready integration cannot abort the cycle.
@@ -267,7 +270,7 @@ class IntegrationManager( Singleton ):
         # monitor module imports IntegrationManager lazily inside its
         # do_work, but the manager only needs the class here for
         # construction.
-        from .connect.monitors import IntegrationSyncCheckMonitor
+        from .connector.monitors import IntegrationSyncCheckMonitor
 
         if settings.DEBUG and settings.SUPPRESS_MONITORS:
             logger.debug( 'Skipping sync-check monitor. See SUPPRESS_MONITORS = True' )
@@ -315,7 +318,11 @@ class IntegrationManager( Singleton ):
             logger.warning( f'Tried to start disabled integration monitor: {integration_id}' )
             return
 
-        monitor = integration_data.integration_gateway.get_monitor()
+        connector = integration_data.integration_gateway.get_connector()
+        if connector is None:
+            logger.debug( f'No connector for integration: {integration_id}' )
+            return
+        monitor = connector.get_monitor()
         if not monitor:
             logger.debug( f'No integration monitor defined: {integration_id}' )
             return
@@ -485,6 +492,15 @@ class IntegrationManager( Singleton ):
         un-pauses) cannot race with another caller. Callers can invoke
         this unconditionally without first checking is_enabled, which
         avoids a TOCTOU window between caller check and manager write.
+
+        Callers that just saved credentials must invoke
+        ``gateway.notify_settings_changed()`` themselves before calling
+        this method (or before any immediate downstream sync). The
+        post_save signal eventually delivers the same nudge via
+        DelayedSignalProcessor, but that 0.1s delay races synchronous
+        calls — and this method's monitor launch only fires on the
+        disabled→enabled transition, so it cannot be relied on for the
+        re-Configure path.
         """
         with self._data_lock:
             with transaction.atomic():
@@ -515,7 +531,7 @@ class IntegrationManager( Singleton ):
           SAFE (default): delete entities without user-created data; preserve
           entities with user-created data by detaching them from the
           integration (via EntityIntegrationOperations.preserve_with_user_data).
-          Preserved entities surface as "Detached from <integration>" in
+          Preserved entities surface as "From <integration>" in
           the entity-detail UI and become candidates for the auto-reconnect
           path on a subsequent re-Configure + sync.
 
@@ -542,15 +558,18 @@ class IntegrationManager( Singleton ):
         # calls on every integration for the duration of a wide
         # removal.
         with transaction.atomic():
-            # Seed: every entity attached to this integration. The
-            # closure walk inside the helper picks up delegate
-            # entities (e.g., Area entities auto-created when a
-            # motion sensor was placed in a view) that would be
+            # Seed: every actively-attached (EXTERNAL) entity for
+            # this integration. Detached / imported rows
+            # (integration_id NULL, previous_integration_id set) are
+            # outside the disable scope — they belong to the user
+            # now. The closure walk inside the helper picks up
+            # delegate entities (e.g., Area entities auto-created
+            # when a motion sensor was placed in a view) that would be
             # orphaned by the removal.
             seed_entity_ids = list(
-                Entity.objects
-                .filter( integration_id = integration_id )
-                .values_list( 'id', flat = True )
+                Entity.objects.external_for(
+                    integration_id = integration_id,
+                ).values_list( 'id', flat = True )
             )
             EntityIntegrationOperations.remove_entities_with_closure(
                 seed_entity_ids = seed_entity_ids,

@@ -11,23 +11,23 @@ import logging
 
 from django.test import TestCase
 
-from hi.integrations.connect.external_view_data import (
+from hi.integrations.connector.external_view_data import (
     AttachmentRef,
     CustomTemplateViewData,
     MinimalViewData,
     NameValuePair,
     StructuredViewData,
 )
-from hi.integrations.connect.integration_gateway import IntegrationGateway
+from hi.integrations.connector.integration_connector import IntegrationConnector
 
 logging.disable(logging.CRITICAL)
 
 
-class IntegrationGatewayExternalViewDataDefaultTests(TestCase):
+class IntegrationConnectorExternalViewDataDefaultTests(TestCase):
 
     def test_get_external_view_data_defaults_to_none(self):
-        gateway = IntegrationGateway()
-        self.assertIsNone(gateway.get_external_view_data(entity=None))
+        connector = IntegrationConnector()
+        self.assertIsNone(connector.get_external_view_data(entity=None))
 
 
 class ExternalViewDataDefaultTemplateNameTests(TestCase):

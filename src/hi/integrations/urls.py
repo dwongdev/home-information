@@ -4,21 +4,42 @@ from django.urls import re_path, include
 
 from hi.apps.common.module_utils import import_module_safe
 
-from .connect import views
+from .connector import views
+from .importer import views as importer_views
 
 
 urlpatterns = [
-    path( '', 
-          views.IntegrationHomeView.as_view(), 
-          name='integrations_home' ),
+    path( '',
+          views.IntegrationHomeView.as_view(),
+          name='integrations_connect_home' ),
+
+    path( 'import/',
+          importer_views.DataImportPageView.as_view(),
+          name='integrations_import_home' ),
+
+    path( 'import/info',
+          importer_views.DataImportInfoView.as_view(),
+          name='integrations_import_info' ),
+
+    re_path( r'^import/configure/(?P<integration_id>[\w\-]+)$',
+             importer_views.ImporterConfigureView.as_view(),
+             name='integrations_import_configure' ),
+
+    re_path( r'^import/run/(?P<integration_id>[\w\-]+)$',
+             importer_views.ImporterRunView.as_view(),
+             name='integrations_import_run' ),
+
+    re_path( r'^import/discard/(?P<integration_id>[\w\-]+)$',
+             importer_views.ImporterDiscardView.as_view(),
+             name='integrations_import_discard' ),
 
     path( 'select', 
           views.IntegrationSelectView.as_view(), 
           name='integrations_select' ),
 
-    re_path( r'^enable/(?P<integration_id>[\w\-]+)$', 
-             views.IntegrationEnableView.as_view(), 
-             name='integrations_enable' ),
+    re_path( r'^enable/(?P<integration_id>[\w\-]+)$',
+             views.ConnectorConfigureView.as_view(),
+             name='integrations_connect_configure' ),
 
     re_path( r'^disable/(?P<integration_id>[\w\-]+)$',
              views.IntegrationDisableView.as_view(),
@@ -52,9 +73,9 @@ urlpatterns = [
           views.IntegrationRefineView.as_view(),
           name='integrations_refine' ),
 
-    re_path( r'^manage/(?P<integration_id>[\w\-]*)$', 
-             views.IntegrationManageView.as_view(), 
-             name='integrations_manage' ),
+    re_path( r'^manage/(?P<integration_id>[\w\-]*)$',
+             views.ConnectorManageView.as_view(),
+             name='integrations_connect_manage' ),
     
     path( 'attribute/history/<int:integration_id>/<int:attribute_id>/', 
           views.IntegrationAttributeHistoryInlineView.as_view(), 
