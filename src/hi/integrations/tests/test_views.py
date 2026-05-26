@@ -66,7 +66,7 @@ class PauseResumeViewTests(SyncViewTestCase):
         IntegrationManager()._integration_data_map['pause_resume_view_test'] = self.integration_data
 
     def test_pause_view_delegates_to_manager(self):
-        url = reverse('integrations_pause', kwargs={'integration_id': 'pause_resume_view_test'})
+        url = reverse('integrations_connect_pause', kwargs={'integration_id': 'pause_resume_view_test'})
         with patch.object(IntegrationManager, 'pause_integration') as mock_pause:
             response = self.client.post(url)
 
@@ -76,7 +76,7 @@ class PauseResumeViewTests(SyncViewTestCase):
         self.assertEqual(call_kwargs['integration_data'].integration_id, 'pause_resume_view_test')
 
     def test_resume_view_delegates_to_manager(self):
-        url = reverse('integrations_resume', kwargs={'integration_id': 'pause_resume_view_test'})
+        url = reverse('integrations_connect_resume', kwargs={'integration_id': 'pause_resume_view_test'})
         with patch.object(IntegrationManager, 'resume_integration') as mock_resume:
             response = self.client.post(url)
 
@@ -89,7 +89,7 @@ class PauseResumeViewTests(SyncViewTestCase):
         self.integration.is_enabled = False
         self.integration.save()
 
-        url = reverse('integrations_pause', kwargs={'integration_id': 'pause_resume_view_test'})
+        url = reverse('integrations_connect_pause', kwargs={'integration_id': 'pause_resume_view_test'})
         with patch.object(IntegrationManager, 'pause_integration') as mock_pause:
             response = self.client.post(url)
 
@@ -100,7 +100,7 @@ class PauseResumeViewTests(SyncViewTestCase):
         self.integration.is_enabled = False
         self.integration.save()
 
-        url = reverse('integrations_resume', kwargs={'integration_id': 'pause_resume_view_test'})
+        url = reverse('integrations_connect_resume', kwargs={'integration_id': 'pause_resume_view_test'})
         with patch.object(IntegrationManager, 'resume_integration') as mock_resume:
             response = self.client.post(url)
 
@@ -136,7 +136,7 @@ class RemoveViewTests(SyncViewTestCase):
         IntegrationManager()._integration_data_map[self.INTEGRATION_ID] = integration_data
 
     def _url(self):
-        return reverse('integrations_disable', kwargs={'integration_id': self.INTEGRATION_ID})
+        return reverse('integrations_connect_disable', kwargs={'integration_id': self.INTEGRATION_ID})
 
     def test_post_with_mode_safe_dispatches_safe(self):
         with patch.object(IntegrationManager, 'disable_integration') as mock_disable:
@@ -302,7 +302,7 @@ class PreSyncViewTests(SyncViewTestCase):
 
     def _url(self):
         return reverse(
-            'integrations_pre_sync',
+            'integrations_connect_pre_sync',
             kwargs={'integration_id': self.INTEGRATION_ID},
         )
 
@@ -412,7 +412,7 @@ class SyncViewTests(SyncViewTestCase):
 
     def _url(self):
         return reverse(
-            'integrations_sync',
+            'integrations_connect_sync',
             kwargs={'integration_id': self.INTEGRATION_ID},
         )
 
@@ -715,7 +715,7 @@ class PlacementFlowTests(SyncViewTestCase):
 
     def _sync_url(self):
         return reverse(
-            'integrations_sync', kwargs={'integration_id': self.INTEGRATION_ID},
+            'integrations_connect_sync', kwargs={'integration_id': self.INTEGRATION_ID},
         )
 
     def _placement_url(self):
@@ -990,8 +990,11 @@ class PlacementDismissAndShowTests(SyncViewTestCase):
             ),
         )
         self.synchronizer = _PlacementTestSynchronizer(sync_result=self.sync_result)
-        # Stub group_entities_for_placement so the GET placement can
-        # rebuild from unplaced entities.
+        self.gateway = _PlacementTestGateway(
+            integration_id=self.INTEGRATION_ID, synchronizer=self.synchronizer,
+        )
+        # Stub group_entities_for_placement on the gateway so the GET
+        # placement can rebuild from unplaced entities.
 
         def group_for_placement(entities):
             items = [
@@ -1006,11 +1009,7 @@ class PlacementDismissAndShowTests(SyncViewTestCase):
             return EntityPlacementInput(
                 groups=[EntityPlacementGroup(label='Cameras', items=items)],
             )
-        self.synchronizer.group_entities_for_placement = group_for_placement
-
-        self.gateway = _PlacementTestGateway(
-            integration_id=self.INTEGRATION_ID, synchronizer=self.synchronizer,
-        )
+        self.gateway.group_entities_for_placement = group_for_placement
         IntegrationManager()._integration_data_map[self.INTEGRATION_ID] = IntegrationData(
             integration_gateway=self.gateway, integration=self.integration,
         )
@@ -1285,7 +1284,7 @@ class ConnectorManageViewSyncCheckContextTests(SyncViewTestCase):
         # inline anchor that links to the pre-sync modal, so the
         # rendered HTML carries both the link text and the URL.
         self.assertIn(
-            reverse('integrations_pre_sync',
+            reverse('integrations_connect_pre_sync',
                     kwargs={'integration_id': self.INTEGRATION_ID}),
             body,
         )
@@ -1293,7 +1292,7 @@ class ConnectorManageViewSyncCheckContextTests(SyncViewTestCase):
 
     def _refresh_link_url(self):
         return reverse(
-            'integrations_pre_sync',
+            'integrations_connect_pre_sync',
             kwargs={'integration_id': self.INTEGRATION_ID},
         )
 

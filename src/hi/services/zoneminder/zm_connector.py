@@ -15,12 +15,6 @@ from hi.apps.system.health_status_provider import HealthStatusProvider
 
 from hi.apps.model_helper import HiModelHelper
 
-from hi.apps.entity.entity_placement import (
-    EntityPlacementInput,
-    EntityPlacementItem,
-    EntityPlacementGroup,
-)
-
 from hi.integrations.connector.integration_connector import IntegrationConnector
 from hi.integrations.connector.sync_check import IntegrationSyncCheck, SyncDelta
 from hi.integrations.connector.sync_result import IntegrationSyncResult
@@ -249,51 +243,32 @@ class ZmConnector( IntegrationConnector, ZoneMinderMixin ):
             result.error_list.append( 'Sync problem. ZM integration disabled?' )
             return result
 
-        self._sync_states( result = result )
+        created_service_entity = self._sync_states( result = result )
         created_monitor_entities = self._sync_monitors( result = result )
-
-        # Existing-entity updates do not need re-placement; only
-        # newly-created monitor entities surface in the dispatcher.
-        if created_monitor_entities:
-            result.placement_input = self.group_entities_for_placement(
-                entities = created_monitor_entities,
-            )
+        result.created_entities = [
+            *( [ created_service_entity ] if created_service_entity else [] ),
+            *created_monitor_entities,
+        ]
         return result
 
-    def group_entities_for_placement( self, entities ) -> EntityPlacementInput:
-        """Single 'Monitors' group: ZM monitors typically share a
-        view, and the operator's first instinct is 'all cameras →
-        same place.' The dispatcher's drill-down still allows
-        per-monitor placement when needed.
-
-        Empty input → empty placement input (no dispatcher
-        rendering)."""
-        if not entities:
-            return EntityPlacementInput()
-        items = [
-            EntityPlacementItem(
-                key = self._placement_item_key( entity = entity ),
-                label = entity.name,
-                entity = entity,
-            )
-            for entity in entities
-        ]
-        return EntityPlacementInput(
-            groups = [ EntityPlacementGroup( label = 'Monitors', items = items ) ],
-        )
-
-    def _sync_states( self, result : IntegrationSyncResult ) -> IntegrationSyncResult:
+    def _sync_states( self, result : IntegrationSyncResult ) -> Optional[Entity]:
+        """Returns the freshly-created ZM service entity when this
+        sync run had to create one; None otherwise. Caller appends
+        the return value (when non-None) to ``result.created_entities``
+        so the framework's placement step treats the service entity
+        symmetrically with everything else created this run."""
         zm_manager = self.zm_manager()
-        
+
         zm_run_state_list = zm_manager.get_zm_states( force_load = True )
         new_state_values_dict = { x.name(): x.name() for x in zm_run_state_list }
-        
+
         zm_entity = Entity.objects.filter_by_integration_key(
             integration_key = zm_manager._zm_integration_key(),
         ).first()
-        
+
+        created_service_entity = None
         if not zm_entity:
-            _ = self._create_zm_entity(
+            created_service_entity = self._create_zm_entity(
                 run_state_name_label_dict = new_state_values_dict,
                 result = result,
             )
@@ -304,7 +279,7 @@ class ZmConnector( IntegrationConnector, ZoneMinderMixin ):
 
         if not zm_run_state_sensor:
             result.error_list.append( 'Missing ZoneMinder sensor for ZM state.' )
-            return
+            return created_service_entity
 
         entity_state = zm_run_state_sensor.entity_state
         new_state_values = new_state_values_dict.keys()
@@ -318,7 +293,7 @@ class ZmConnector( IntegrationConnector, ZoneMinderMixin ):
                 f'Updated ZM state values to: {new_state_values_dict}'
             )
 
-        return
+        return created_service_entity
 
     def _sync_monitors( self, result : IntegrationSyncResult ):
         """Sync monitors and return the list of newly-created monitor

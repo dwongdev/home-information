@@ -131,13 +131,14 @@ class TestHomeBoxConnector(SimpleTestCase):
                             for message in result.error_list))
 
 
-class TestHomeBoxConnectorSyncResultGrouping(SimpleTestCase):
-    """Phase 2 grouping behavior: HomeBox has no domain notion of
-    grouping, so every imported item lands in `ungrouped_items`.
-    `groups` stays empty. The framework's placement modal decides
-    how to surface ungrouped items at render time."""
+class TestHomeBoxConnectorSyncImplCreatedEntities(SimpleTestCase):
+    """HomeBoxConnector._sync_impl reports newly-created entities
+    on result.created_entities. The framework caller does the
+    grouping via the gateway (HomeBox inherits the by-EntityType
+    default; with HbConverter currently stamping every item as
+    OTHER, the operator sees a single 'Other' group)."""
 
-    def test_sync_impl_populates_ungrouped_items_only(self):
+    def test_sync_impl_populates_created_entities(self):
         synchronizer = HomeBoxConnector()
         manager = Mock()
         manager.hb_client = object()
@@ -163,19 +164,9 @@ class TestHomeBoxConnectorSyncResultGrouping(SimpleTestCase):
                           return_value=[entity_a, entity_b]):
             result = synchronizer._sync_impl(is_initial_connect=True)
 
-        self.assertIsNotNone(result.placement_input)
-        self.assertEqual(result.placement_input.groups, [])
-        self.assertEqual(len(result.placement_input.ungrouped_items), 2)
-        labels = [item.label for item in result.placement_input.ungrouped_items]
-        self.assertEqual(labels, ['Cordless Drill', 'Stud Finder'])
-        keys = [item.key for item in result.placement_input.ungrouped_items]
-        self.assertEqual(
-            keys,
-            [
-                f'{HbMetaData.integration_id}:item.42',
-                f'{HbMetaData.integration_id}:item.43',
-            ],
-        )
+        # Created entities flow through to the framework caller, which
+        # groups them via gateway.group_entities_for_placement.
+        self.assertEqual(result.created_entities, [entity_a, entity_b])
 
     def test_sync_impl_emits_empty_when_no_items_imported(self):
         synchronizer = HomeBoxConnector()
@@ -187,7 +178,9 @@ class TestHomeBoxConnectorSyncResultGrouping(SimpleTestCase):
                 patch.object(synchronizer, '_sync_helper_entities', return_value=[]):
             result = synchronizer._sync_impl(is_initial_connect=True)
 
-        # No newly-created entities → placement_input is None.
+        # No newly-created entities → empty created_entities → framework
+        # caller leaves placement_input as None.
+        self.assertEqual(result.created_entities, [])
         self.assertIsNone(result.placement_input)
 
 
