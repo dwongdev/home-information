@@ -162,7 +162,7 @@ class DataImportPageViewTests(TestCase):
             )),
         ])
         response = self.client.get(reverse('integrations_import_home'))
-        self.assertIn('Also available as an', response.content.decode())
+        self.assertIn('Also available as a Connector', response.content.decode())
 
 
 class ImporterConfigureViewTests(TestCase):
@@ -256,7 +256,7 @@ class ImporterConfigureViewTests(TestCase):
         response = self.client.get(self._url())
         body = response.content.decode()
         self.assertIn('Cannot configure', body)
-        self.assertIn('GO TO INTEGRATIONS', body)
+        self.assertIn('GO TO CONNECTORS', body)
         self.assertIn(reverse('integrations_connect_home'), body)
 
     def test_get_import_not_blocked_for_single_capability_integration(self):

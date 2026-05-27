@@ -39,7 +39,7 @@ class FrigateConnector( IntegrationConnector, FrigateMixin ):
 
     CAMERA_SNAPSHOT_STREAM_FPS = 1.0
 
-    def get_integration_metadata(self):
+    def get_metadata(self):
         return FrigateMetaData
 
     def get_monitor(self) -> FrigateMonitor:
@@ -118,7 +118,7 @@ class FrigateConnector( IntegrationConnector, FrigateMixin ):
             metadata = { 'event_id': event_id },
         )
 
-    def get_description(self, is_initial_connect : bool) -> Optional[ str ]:
+    def get_sync_description(self, is_initial_connect : bool) -> Optional[ str ]:
         if is_initial_connect:
             return (
                 'Each Frigate camera becomes a HI camera entity with'

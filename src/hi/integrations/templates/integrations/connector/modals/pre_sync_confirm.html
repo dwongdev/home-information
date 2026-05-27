@@ -30,7 +30,7 @@ Context:
                             (initial CONNECT); False for subsequent
                             update-check operations.
   sync_description        : Optional[str] — per-integration text from
-                            IntegrationConnector.get_description.
+                            IntegrationConnector.get_sync_description.
   sync_url                : str (required) — URL the form posts to.
   removal_summary         : Optional[IntegrationRemovalSummary] —
                             integration's user-data classification.
@@ -53,6 +53,8 @@ Check {{ integration_data.label }} for updates?
 {% endblock %}
 
 {% block body %}
+{% include "integrations/panes/integration_modal_header.html" %}
+  
 {% if is_initial_connect %}
 <p>
   Connect will pull items from <strong>{{ integration_data.label }}</strong>
@@ -67,7 +69,7 @@ Check {{ integration_data.label }} for updates?
 </p>
 {% if removal_summary.has_mixed_state %}
 <p>
-  This integration has <strong>{{ removal_summary.user_data_count }}</strong>
+  This connector has <strong>{{ removal_summary.user_data_count }}</strong>
   {% if removal_summary.user_data_count == 1 %}item{% else %}items{% endif %}
   with custom data you've added. If an update would drop
   {% if removal_summary.user_data_count == 1 %}that item{% else %}any of them{% endif %}:
@@ -75,7 +77,7 @@ Check {{ integration_data.label }} for updates?
 <ul>
   <li>
     <strong>RETAIN MISSING</strong> — preserve any missing items with custom data
-    (detached from this integration; they will show as
+    (detached from this connector; they will show as
     <em>Detached from {{ integration_data.label }}</em> in the entity-detail UI,
     with custom attributes and layout retained).
   </li>

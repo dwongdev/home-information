@@ -11,11 +11,10 @@ candidate-listing, item ingest, and discard operations.
 """
 from typing import List
 
+from hi.integrations.capability_gateway import CapabilityGateway
+from hi.integrations.enums import IntegrationCapability
 from hi.integrations.models import IntegrationAttribute
-from hi.integrations.transient_models import (
-    IntegrationMetaData,
-    IntegrationValidationResult,
-)
+from hi.integrations.transient_models import IntegrationValidationResult
 
 from .transient_models import (
     CandidateItem,
@@ -24,10 +23,9 @@ from .transient_models import (
 )
 
 
-class IntegrationImporter:
+class IntegrationImporter( CapabilityGateway ):
 
-    def get_metadata(self) -> IntegrationMetaData:
-        raise NotImplementedError('Subclasses must override this method')
+    capability = IntegrationCapability.IMPORT
 
     def validate_configuration(
             self,

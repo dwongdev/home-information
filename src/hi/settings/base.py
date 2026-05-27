@@ -128,6 +128,7 @@ INSTALLED_APPS = [
     'hi.services.hass',
     'hi.services.homebox',
     'hi.services.frigate',
+    'hi.services.paperless',
     'hi.apps.profiles',
 ]
 
@@ -292,6 +293,7 @@ PIPELINE = {
                 'js/video-timeline.js',
                 'js/attr.js',
                 'js/attr-dirty-tracking.js',
+                'js/attr-picker.js',
             ),
             'output_filename': 'js/js_hi_grid_header_content.js',
         },

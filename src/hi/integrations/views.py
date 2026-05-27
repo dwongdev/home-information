@@ -57,10 +57,18 @@ class CapabilityConfigureView( HiModalView,
     def get_template_name( self ) -> str:
         return self.template_name
 
+    def get_capability_gateway( self, integration_data ):
+        """Return the ``CapabilityGateway`` instance for this configure
+        view's capability. Subclasses implement by calling the
+        appropriate per-capability getter on the gateway. The base
+        class deliberately does not enumerate capabilities — each
+        subclass already knows its own."""
+        raise NotImplementedError('Subclasses must override this method')
+
     def _build_attr_item_context( self, integration_data ):
         return IntegrationAttributeItemEditContext(
             integration_data       = integration_data,
-            capability             = self.capability,
+            capability_gateway     = self.get_capability_gateway( integration_data ),
             update_button_label    = self.button_label,
             suppress_history       = True,
             show_secrets           = True,
@@ -302,9 +310,12 @@ class IntegrationAttributeHistoryInlineView( View,
         integration_data = IntegrationManager().get_integration_data(
             integration_id = attribute.integration.integration_id,
         )
+        # History inline ops target a specific attribute by id; the
+        # capability filter inside the edit context is not consulted
+        # here, so no capability gateway is needed.
         attr_item_context = IntegrationAttributeItemEditContext(
             integration_data = integration_data,
-            capability = IntegrationCapability.CONNECT,
+            capability_gateway = None,
         )
         return self.get_history(
             request = request,
@@ -331,9 +342,12 @@ class IntegrationAttributeRestoreInlineView( View,
             integration_id = attribute.integration.integration_id,
         )
 
+        # Restore inline ops target a specific attribute by id; the
+        # capability filter inside the edit context is not consulted
+        # here, so no capability gateway is needed.
         attr_item_context = IntegrationAttributeItemEditContext(
             integration_data = integration_data,
-            capability = IntegrationCapability.CONNECT,
+            capability_gateway = None,
         )
         return self.post_restore(
             request = request,

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class HassConnector( IntegrationConnector, HassMixin ):
 
-    def get_integration_metadata(self):
+    def get_metadata(self):
         return HassMetaData
 
     def get_monitor(self) -> HassMonitor:
@@ -74,7 +74,7 @@ class HassConnector( IntegrationConnector, HassMixin ):
 
         return VideoSnapshot( source_url = source_url )
 
-    def get_description(self, is_initial_connect: bool) -> Optional[str]:
+    def get_sync_description(self, is_initial_connect: bool) -> Optional[str]:
         if is_initial_connect:
             return 'Only items matching your Allowed Item Types setting will be imported.'
         return 'Only items matching your Allowed Item Types setting are compared.'

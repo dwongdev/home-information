@@ -64,11 +64,20 @@
     margin-left: auto; /* Push to right */
 }
 
-.attr-v2-action-buttons button {
+.attr-v2-action-buttons button,
+.attr-v2-action-buttons a.btn {
     min-height: 44px; /* Touch-friendly minimum */
     padding: 0.375rem 0.75rem;
     font-size: 0.875rem;
     border-radius: 0.25rem;
+}
+
+/* <a class="btn"> doesn't vertically center its content the way
+   <button> does; force-center so anchor-styled buttons line up
+   with their button-element siblings in the action bar. */
+.attr-v2-action-buttons a.btn {
+    display: inline-flex;
+    align-items: center;
 }
 
 .attr-v2-status-message {
@@ -643,6 +652,7 @@
 
 /* Button Transitions */
 .attr-v2-action-buttons button,
+.attr-v2-action-buttons a.btn,
 .attr-v2-file-actions button,
 .attr-v2-attribute-actions button,
 .attr-v2-reorder-controls button,
@@ -651,6 +661,7 @@
 }
 
 .attr-v2-action-buttons button:hover,
+.attr-v2-action-buttons a.btn:hover,
 .attr-v2-file-actions button:hover,
 .attr-v2-attribute-actions button:hover,
 .attr-v2-reorder-controls button:hover:not(:disabled),
@@ -676,6 +687,7 @@
 
 /* Enhanced focus states for buttons and interactive elements */
 .attr-v2-action-buttons button:focus,
+.attr-v2-action-buttons a.btn:focus,
 .attr-v2-file-actions button:focus,
 .attr-v2-attribute-actions button:focus,
 .attr-v2-reorder-controls button:focus,
@@ -883,6 +895,7 @@
     .attr-v2-attribute-card:hover,
     .attr-v2-file-thumbnail:hover,
     .attr-v2-action-buttons button:hover,
+    .attr-v2-action-buttons a.btn:hover,
     .attr-v2-file-actions button:hover,
     .attr-v2-attribute-actions button:hover {
         transform: none;
@@ -906,6 +919,7 @@
     .attr-v2-file-card,
     .attr-v2-attribute-card,
     .attr-v2-action-buttons button,
+    .attr-v2-action-buttons a.btn,
     .attr-v2-file-actions button,
     .attr-v2-attribute-actions button,
     .attr-v2-reorder-controls button,
@@ -984,7 +998,8 @@
     vertical-align: middle;
 }
 
-.attr-v2-action-buttons button .hi-icon-left {
+.attr-v2-action-buttons button .hi-icon-left,
+.attr-v2-action-buttons a.btn .hi-icon-left {
     margin-right: 0.5rem;
 }
 }
@@ -1740,5 +1755,72 @@
 
 .attr-ext-more {
     padding-left: 0;
+}
+
+/* ====================================================================== */
+/* ATTRIBUTE_REFERENCE picker                                             */
+/* ====================================================================== */
+
+/* Bootstrap's modal-dialog-scrollable shrinks the flex children of
+   modal-content to fit the constrained height. The default Bootstrap
+   markup has .modal-header / .modal-footer with flex-shrink:0 so only
+   .modal-body shrinks; this project uses .modal-title in place of
+   .modal-header, so we re-establish the contract here for any modal
+   that opts into scrollable behavior. */
+.modal-dialog-scrollable .modal-title,
+.modal-dialog-scrollable .modal-footer {
+    flex-shrink: 0;
+}
+
+/* The picker modal opts into Bootstrap's modal-dialog-scrollable so the
+   modal-body is the scroll container while the header and footer stay
+   anchored. Pin the search controls to the top edge of the body so the
+   operator can refine their query at any scroll position without
+   scrolling back up to find the search row. */
+.hi-attr-picker-search-form {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background-color: var(--background-color, #fff);
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+/* Zero the modal-body's top padding so the sticky search form is flush
+   against the title — otherwise modal-body's default padding-top shows
+   scrolling content through the gap above the sticky element. The
+   search form supplies its own padding-top for breathing room. */
+.hi-attr-picker .modal-body {
+    padding-top: 0;
+}
+
+/* Source banner — always rendered. With one source the button is
+   disabled (no caret, no hover affordance) so the visual matches
+   the multi-source case structurally but doesn't invite a click
+   that does nothing useful. The button face shows the source's
+   logo on a light background; native logos meant for white render
+   correctly here. */
+.hi-attr-picker-source-banner {
+    background-color: #fff;
+    border: 1px solid var(--line-color, #dee2e6);
+    padding: 0.5rem 0.75rem;
+}
+.hi-attr-picker-source-banner-logo {
+    max-height: 24px;
+    width: auto;
+}
+.hi-attr-picker-source-banner-label {
+    font-weight: 500;
+}
+.hi-attr-picker-source-banner-single .dropdown-toggle::after {
+    display: none;
+}
+.hi-attr-picker-source-banner-single .dropdown-toggle:disabled {
+    opacity: 1;
+    cursor: default;
+}
+.hi-attr-picker-source-option img {
+    max-height: 20px;
+    width: auto;
 }
 
