@@ -19,20 +19,15 @@ from hi.integrations.placement_request import PlacementUrlParams
 
 
 class CapabilityBlockViewMixin:
-    """Block IMPORT initiation when the integration has active
-    Connect entities, directing the user to disable the integration
-    first.
+    """Block IMPORT initiation when the integration has active Connect
+    entities, directing the user to disable the integration first.
 
-    The asymmetry is principled. CONNECT does not need a symmetric
-    block: sync's reconnect-then-create order will adopt any pre-
-    existing detached/imported rows for the same integration into
-    the live Connect session, so no collision is possible. IMPORT
-    creates new HI-owned rows, which would collide with active-
-    Connect rows unless we block this entry point.
-
-    Mixed into the IMPORT-side Configure view; CONNECT-side views
-    can either omit the mixin or call this method as a no-op for
-    capability=CONNECT.
+    The asymmetry is principled. CONNECT does not need a symmetric block:
+    sync's reconnect-then-create order will adopt any pre-existing
+    detached/imported rows for the same integration into the live Connect
+    session, so no collision is possible. IMPORT creates new HI-owned rows,
+    which would collide with active-Connect rows unless we block this entry
+    point.
     """
 
     def render_capability_block_if_conflict(
@@ -41,9 +36,6 @@ class CapabilityBlockViewMixin:
             integration_data,
             capability_being_initiated : IntegrationCapability,
     ):
-        # CONNECT initiation cannot collide; the reconnect path
-        # adopts any existing provenance entities. Only IMPORT
-        # initiation needs blocking.
         if capability_being_initiated != IntegrationCapability.IMPORT:
             return None
         capabilities = integration_data.integration_metadata.capabilities
@@ -84,11 +76,8 @@ class IntegrationViewMixin:
     def get_integration_data( self, request, *args, **kwargs ):
         """Resolve the URL-routed integration_id to its IntegrationData.
 
-        Assumes there is a required ``integration_id`` in kwargs;
-        raises BadRequest if missing and Http404 if not registered.
-        Mirrors EntityViewMixin.get_entity's signature so views can
-        chain helpers uniformly.
-        """
+        Requires ``integration_id`` in kwargs; raises BadRequest if missing
+        and Http404 if not registered."""
         integration_id = kwargs.get('integration_id')
         if not integration_id:
             raise BadRequest('Missing integration id.')
@@ -115,38 +104,32 @@ class IntegrationViewMixin:
                                           error_title ):
         """
         Validate the proposed integration configuration in two stages:
-          1. Schema-level check via gateway.validate_configuration (offline,
-             fast). Catches structural problems with the attribute set.
-          2. Live access validation via gateway.validate_access bounded
-             by IntegrationManager.HEALTH_CHECK_TIMEOUT_SECS. Catches
-             unreachable upstream / bad credentials so the user sees the
-             specific reason inline rather than experiencing a silent
-             save followed by a delayed background error.
+          1. Schema-level check (offline, fast). Catches structural problems
+             with the attribute set.
+          2. Live access validation with bounded timeout. Catches unreachable
+             upstream / bad credentials so the user sees the specific reason
+             inline rather than experiencing a silent save followed by a delayed
+             background error.
 
-        Both gateway methods are required by their contracts to never
-        throw — they convert any internal exception into the appropriate
-        result type (IntegrationValidationResult.error /
-        ConnectionTestResult.failure) carrying a human-readable message.
-        We deliberately do NOT wrap their invocations in a broad try/
-        except here: doing so would coerce the gateway's specific
-        failure message into a generic catch-all string, and would also
-        hide genuine programming bugs (which should surface through
-        Django's error pipeline rather than be silently translated into
-        a form-level error).
+        Both gateway methods are contractually required to never throw -- they
+        convert any internal exception into the appropriate result type
+        carrying a human-readable message. We deliberately do NOT wrap their
+        invocations in a broad try/except here: that would coerce the gateway's
+        specific failure message into a generic catch-all string, and would
+        hide genuine programming bugs (which should surface through Django's
+        error pipeline rather than be silently translated into a form-level
+        error).
         """
         integration_data = attr_item_context.integration_data
         gateway = integration_data.integration_gateway
 
-        # Get current attribute values from the formset
         integration_attributes = []
         for form in regular_attributes_formset:
             if form.cleaned_data and not form.cleaned_data.get('DELETE', False):
-                # Create a temporary attribute-like object with the form data
                 attr_instance = form.instance
                 attr_instance.value = form.cleaned_data.get('value', '')
                 integration_attributes.append(attr_instance)
 
-        # Stage 1: schema-only validation.
         validation_result = gateway.validate_configuration(
             integration_attributes
         )
@@ -157,7 +140,6 @@ class IntegrationViewMixin:
             )
             return
 
-        # Stage 2: live access validation with bounded timeout.
         test_result = gateway.validate_access(
             integration_attributes = integration_attributes,
             timeout_secs = IntegrationManager.HEALTH_CHECK_TIMEOUT_SECS,
@@ -174,11 +156,7 @@ class IntegrationPlacementViewMixin:
     """Modal context builders shared across the placement /
     dismiss-confirm / post-dispatch views. Knows UI conventions
     (URL routing for the integration placement flow, location-view
-    dropdown shape) but no business logic.
-
-    Designed to be mixed into ``HiModalView`` subclasses so the
-    rendering methods can call ``self.modal_response(...)`` directly.
-    """
+    dropdown shape) but no business logic."""
 
     def render_placement( self,
                           request,
@@ -186,16 +164,14 @@ class IntegrationPlacementViewMixin:
                           placement_input,
                           is_initial_connect : bool,
                           entity_id_filter = None ):
-        """Render the placement modal seeded with an
-        ``EntityPlacementInput``. Dropdowns offer both LocationView
-        and Collection targets; the top dropdown additionally offers
-        '+ New view' and '+ New collection' sentinels.
+        """Render the placement modal seeded with an ``EntityPlacementInput``.
+        Dropdowns offer both LocationView and Collection targets; the top
+        dropdown additionally offers '+ New view' and '+ New collection'
+        sentinels.
 
-        Computes two presentation aids in the view rather than the
-        template: a smart default for the top dropdown
-        (``top_default_value``) and an inventory preview line shown
-        beneath it (``inventory_preview``). The template is then a
-        thin renderer of these and the placement_input itself.
+        Computes two presentation aids in the view rather than the template:
+        a smart default for the top dropdown (``top_default_value``) and an
+        inventory preview line shown beneath it (``inventory_preview``).
         """
         location_view_groups = self._build_location_view_groups()
         collection_list = self._build_collection_list()
@@ -219,17 +195,17 @@ class IntegrationPlacementViewMixin:
         inventory_preview = self._build_inventory_preview(
             placement_input = placement_input,
         )
-        # Suppress the column-header heading when the grouping
-        # dimension is the implicit default ("Item Type") — it
-        # adds no information. The heading still renders when an
-        # integration override conveys context (e.g. "HomeBox Location").
+        # Suppress the column-header heading when the grouping dimension is
+        # the implicit default ("Item Type") -- it adds no information. The
+        # heading still renders when an integration override conveys context
+        # (e.g. "HomeBox Location").
         grouping_heading = (
             placement_input.heading
             if placement_input.heading != PLACEMENT_DEFAULT_HEADING
             else None
         )
-        # The form posts back to the same URL that rendered the
-        # modal — single CBV, GET renders / POST processes.
+        # Form posts back to the same URL that rendered the modal -- single
+        # CBV, GET renders / POST processes.
         placement_url = reverse(
             'integrations_placement',
             kwargs = { 'integration_id': integration_data.integration_id },
@@ -259,11 +235,10 @@ class IntegrationPlacementViewMixin:
                                 integration_data,
                                 is_initial_connect : bool,
                                 entity_ids = None ):
-        """Render the NOT NOW confirmation modal. GO BACK targets
-        the placement GET endpoint, with is_initial_connect and
-        (when present) the entity-id scope threaded through as
-        query parameters so the operator returns to the same set
-        they were viewing."""
+        """Render the dismiss confirmation modal. The back action targets the
+        placement GET endpoint with is_initial_connect and (when present) the
+        entity-id scope threaded through as query parameters so the operator
+        returns to the same set they were viewing."""
         placement_url = PlacementUrlParams(
             is_initial_connect = is_initial_connect,
             entity_ids = list( entity_ids ) if entity_ids else [],
@@ -285,17 +260,13 @@ class IntegrationPlacementViewMixin:
                                integration_data,
                                outcome,
                                is_initial_connect : bool ):
-        """Render the post-dispatch summary modal from a
-        ``PlacementOutcome``.
+        """Render the post-dispatch summary modal from a ``PlacementOutcome``.
 
-        The primary action button is REFINE for view-targeted
-        primary summaries (drag entities into spatial position) and
-        REVIEW for collection-targeted primary summaries (no spatial
-        refinement; the link just lands on the collection's view
-        page). ``PlacementOutcome.primary_summary`` already prefers
-        view-targeted summaries when any exist, so the REFINE path
-        is taken whenever the operator placed at least one entity
-        into a LocationView."""
+        The primary action targets the view-refinement endpoint for view-
+        targeted primary summaries (drag entities into spatial position) and
+        the collection-view page for collection-targeted primary summaries
+        (no spatial refinement). ``PlacementOutcome.primary_summary`` already
+        prefers view-targeted summaries when any exist."""
         primary = outcome.primary_summary
         primary_action = None
         secondary_action_list = []
@@ -318,14 +289,12 @@ class IntegrationPlacementViewMixin:
         )
 
     def _build_location_view_groups( self ):
-        """Existing-views dropdown source: ``[(Location,
-        [LocationView])]`` ordered by Location.order_id, views by
-        LocationView.order_id within each. Always grouped (never
-        flat) so multi-Location deployments can disambiguate views
-        with shared names. Single SQL query joining LocationView ↔
-        Location; insertion-order in the dict preserves the sort
-        from the database. Empty Locations drop out, which is the
-        right behavior for a dropdown source."""
+        """Existing-views dropdown source: ``[(Location, [LocationView])]``
+        ordered by Location.order_id, views by LocationView.order_id within
+        each. Always grouped (never flat) so multi-Location deployments can
+        disambiguate views with shared names. Single SQL query joining
+        LocationView and Location; insertion-order in the dict preserves the
+        sort from the database. Empty Locations drop out."""
         queryset = LocationView.objects.select_related('location').order_by(
             'location__order_id', 'order_id',
         )
@@ -341,10 +310,9 @@ class IntegrationPlacementViewMixin:
         return list( Collection.objects.order_by('order_id').all() )
 
     def _summary_url( self, summary ) -> str:
-        """URL for the post-dispatch modal's per-summary action.
-        Views go through ``integrations_refine`` (which lands the
-        operator in edit mode for that view); collections link to
-        the read-only ``collection_view`` page."""
+        """URL for each per-summary action. Views go through ``integrations_refine``
+        (which lands the operator in edit mode for that view); collections link
+        to the read-only ``collection_view`` page."""
         if summary.is_view:
             return reverse(
                 'integrations_refine',
@@ -360,15 +328,14 @@ class IntegrationPlacementViewMixin:
                                     is_initial_connect : bool ) -> str:
         """Smart default for the placement's top dropdown.
 
-        On Initial Connect the operator has no existing target — pre-
-        select '+ New view' so they can click APPLY without further
-        input.
+        On Initial Connect the operator has no existing target -- pre-select
+        '+ New view' so they can apply without further input.
 
-        On update check, prefer whichever existing target (LocationView
-        OR Collection) currently holds the most entities for this
-        integration. Ties broken by id ascending (deterministic).
-        Falls back to '' (Don't place) when no existing target holds
-        any of this integration's entities — operator picks.
+        On update check, prefer whichever existing target (LocationView OR
+        Collection) currently holds the most entities for this integration.
+        Ties broken by id ascending (deterministic). Falls back to '' (no
+        default) when no existing target holds any of this integration's
+        entities -- operator picks.
         """
         if is_initial_connect:
             return '__new_view__'
@@ -398,10 +365,9 @@ class IntegrationPlacementViewMixin:
                 return f'view:{top_view["location_view_id"]}'
             if collection_count > view_count:
                 return f'collection:{top_collection["collection_id"]}'
-            # Equal counts — prefer lower target type ordinal. Views
-            # before collections is an arbitrary but deterministic
-            # tiebreak; the operator's own count was already a true
-            # tie so either answer is fine.
+            # Equal counts -- prefer lower target type ordinal. Views before
+            # collections is an arbitrary but deterministic tiebreak; the
+            # operator's own count was already a true tie so either answer is fine.
             return f'view:{top_view["location_view_id"]}'
 
         if top_view:
@@ -411,27 +377,24 @@ class IntegrationPlacementViewMixin:
         return ''
 
     def _derive_new_target_names( self, request, integration_label : str ) -> tuple:
-        """Pre-resolve the names that the '+ New view' / '+ New
-        collection' options would actually produce on Apply, so the
-        dropdown labels match the operator's eventual reality.
+        """Pre-resolve the names that the '+ New view' / '+ New collection'
+        options would actually produce on Apply, so the dropdown labels match
+        the operator's eventual reality.
 
-        Without this, an operator who already has a view named
-        'Home Assistant' would see the option 'New view: "Home
-        Assistant"' but get a view named 'Home Assistant (2)' on
-        save — confusing.
+        Without this, an operator who already has a view named 'Home Assistant'
+        would see the option 'New view: "Home Assistant"' but get a view named
+        'Home Assistant (2)' on save -- confusing.
 
-        Returns ``(new_view_name, new_collection_name)``. Falls
-        back to ``integration_label`` for the view name when no
-        default Location is configured (the apply path will raise
-        BadRequest in that case anyway; the modal label just shows
-        the un-disambiguated label).
+        Returns ``(new_view_name, new_collection_name)``. Falls back to
+        ``integration_label`` for the view name when no default Location is
+        configured (the apply path will raise BadRequest in that case; the
+        modal label just shows the un-disambiguated label).
 
-        Race-condition note: another operator could create a same-
-        named view/collection between render and submit, in which
-        case the apply-time disambiguation produces a different
-        suffix than the modal advertised. This is an extremely rare
-        case and the apply-time logic always picks a free name, so
-        no special handling is needed.
+        Race-condition note: another operator could create a same-named
+        view/collection between render and submit, in which case the apply-time
+        disambiguation produces a different suffix than the modal advertised.
+        This is rare and the apply-time logic always picks a free name, so no
+        special handling is needed.
         """
         try:
             location = LocationManager().get_default_location( request = request )
@@ -449,15 +412,12 @@ class IntegrationPlacementViewMixin:
     def _build_inventory_preview( self, placement_input ) -> list:
         """Compact label/count summary of what's about to be placed.
 
-        Used as a single-line preview beneath the top dropdown when
-        the operator has the group rows collapsed — preserves the
-        'free preview of what's about to be imported' signal that
-        the always-visible group cards previously provided.
+        Used as a single-line preview beneath the top dropdown when the
+        operator has the group rows collapsed.
 
-        Returns an empty list for the rare truly-ungrouped case
-        (no groups, only ``ungrouped_items``). Callers should hide
-        the preview entirely in that case, since restating the
-        count is just noise.
+        Returns an empty list for the truly-ungrouped case (no groups, only
+        ``ungrouped_items``). Callers should hide the preview entirely in that
+        case, since restating the count is just noise.
         """
         if not placement_input.groups:
             return []

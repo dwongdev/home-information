@@ -1,26 +1,22 @@
 """
 Operations on EventDefinition rows with respect to integration ownership.
 
-This module holds the integration-scoped cleanup helpers for
-EventDefinition. The policy is deliberately narrow:
+Integration-scoped cleanup with a deliberately narrow policy:
 
-  * Only EventDefinition rows whose own ``integration_id`` matches the
-    disconnecting integration are removed. User-owned EventDefinition
-    rows (``integration_id IS NULL``) are never touched here, even when
-    they reference an entity state that an integration is about to
-    delete. The silent semantic change of a user-owned multi-clause
-    rule losing one of its clauses is a known gap deferred to the
-    broader EventDefinition UX redesign.
-  * The cleanup is invoked at the integration disconnect / sync-removal
-    boundary (``EntityIntegrationOperations``); there is no general
-    "EntityState delete cascades to parent EventDefinition" rule.
+  * Only EventDefinition rows whose own ``integration_id`` matches are
+    removed. User-owned EventDefinition rows (``integration_id IS NULL``)
+    are never touched here, even when they reference an entity state that
+    an integration is about to delete. The silent semantic change of a
+    user-owned multi-clause rule losing one of its clauses is a known gap.
+  * No general "EntityState delete cascades to parent EventDefinition"
+    rule exists -- cleanup runs only at the integration disconnect /
+    sync-removal boundary.
 
-EventDefinition has no FK back to Entity. The reverse path is
-``EventDefinition → EventClause → EntityState → Entity``, traversed
-explicitly in the queries below. Children
-(``EventClause`` / ``ControlAction`` / ``AlarmAction`` / ``EventHistory``)
-have ``on_delete=CASCADE`` to ``EventDefinition`` and are removed by
-the parent delete; we do not need to enumerate them here.
+EventDefinition has no FK back to Entity; the reverse path is
+``EventDefinition -> EventClause -> EntityState -> Entity``, traversed
+explicitly in the queries below. Children (``EventClause``,
+``ControlAction``, ``AlarmAction``, ``EventHistory``) cascade from the
+parent delete and are not enumerated here.
 """
 
 import logging
@@ -33,22 +29,15 @@ logger = logging.getLogger(__name__)
 
 
 class EventDefinitionOperations:
-    """
-    Integration-scoped cleanup of EventDefinition rows.
-
-    All methods are explicit and integration-id-bounded. Callers are
-    expected to invoke these from inside their own ``transaction.atomic``
-    boundary; the helpers do not open transactions themselves.
-    """
+    """Callers must wrap invocations in ``transaction.atomic``; the helpers
+    do not open transactions themselves."""
 
     @staticmethod
     def delete_for_integration( integration_id : str ) -> int:
         """
         Delete every EventDefinition whose own ``integration_id`` matches.
-
-        Used by Disable-ALL and as a backstop. Does not consider clauses
-        — the integration_id on the EventDefinition itself is the
-        ownership signal.
+        Does not traverse clauses -- the integration_id on the EventDefinition
+        itself is the ownership signal.
         """
         if not integration_id:
             return 0
@@ -67,12 +56,9 @@ class EventDefinitionOperations:
     def delete_for_entity( cls, entity : Entity ) -> int:
         """
         Delete EventDefinitions owned by this entity's integration whose
-        clauses reference any of this entity's states.
-
-        Used by ``EntityIntegrationOperations.preserve_with_user_data``
-        and per-entity sync removal. Returns 0 (no-op) when the entity
-        is not currently integration-attached, so callers can invoke
-        this unconditionally.
+        clauses reference any of this entity's states. Returns 0 when the
+        entity is not currently integration-attached, so callers may invoke
+        unconditionally.
         """
         if not entity.integration_id:
             return 0

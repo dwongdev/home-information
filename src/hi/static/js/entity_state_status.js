@@ -1,5 +1,5 @@
 /*
- * Home Information — Entity-state polling-update dispatcher.
+ * Home Information - Entity-state polling-update dispatcher.
  *
  * Consumes the ``entityStateStatusMap`` from the polling response
  * and applies per-EntityState DOM updates. The map is keyed by the
@@ -11,23 +11,23 @@
  * updates carries ``data-state-id="<entity_state_id>"`` plus one or
  * more declaration attributes. Each declaration is presence-only:
  *
- *   data-status            → set the element's ``status`` attr to
- *                            ``entry.status`` (singular status push;
- *                            CSS rules elsewhere react to it).
- *   data-controller-value  → set the form value / checked / selected
- *                            from ``entry.controller.value``.
- *   data-display-text      → set element text to ``entry.display.text``.
- *   data-display-magnitude → set element text to ``entry.display.magnitude``.
- *   data-display-unit      → set element text to ``entry.display.unit``.
- *   data-svg-style         → set every attribute in ``entry.svg_style``
- *                            (status, stroke, fill, stroke-width,
- *                            fill-opacity, stroke-dasharray) on this
- *                            element. Used by LocationView SVG icon /
- *                            path elements.
+ *   data-status            -> set the element's ``status`` attr to
+ *                             ``entry.status`` (singular status push;
+ *                             CSS rules elsewhere react to it).
+ *   data-controller-value  -> set the form value / checked / selected
+ *                             from ``entry.controller.value``.
+ *   data-display-text      -> set element text to ``entry.display.text``.
+ *   data-display-magnitude -> set element text to ``entry.display.magnitude``.
+ *   data-display-unit      -> set element text to ``entry.display.unit``.
+ *   data-svg-style         -> set every attribute in ``entry.svg_style``
+ *                             (status, stroke, fill, stroke-width,
+ *                             fill-opacity, stroke-dasharray) on this
+ *                             element. Used by LocationView SVG icon /
+ *                             path elements.
  *
  * The dispatcher walks ``[data-state-id]`` once, looks up the
  * entry, and applies each declaration the element opts into. No
- * descendant traversal and no class-based join — each element is
+ * descendant traversal and no class-based join -- each element is
  * self-describing, so authors place the markers on whichever
  * element they want updated.
  *
@@ -61,7 +61,7 @@
     // jQuery ready for the initial page render AND after every async
     // content insertion (via antinode), so panels in dynamically-loaded
     // modals get a chance to initialize before the first polling tick.
-    // Init handlers must be idempotent — they re-scan the whole
+    // Init handlers must be idempotent -- they re-scan the whole
     // document on each call and should be safe to invoke on already-
     // initialized elements.
     const panelUpdateHandlers = [];
@@ -175,8 +175,6 @@
             setPropIfDifferent( element, 'value', String( value ) );
             return;
         }
-        // Other shapes (color picker, etc.) get their own branches
-        // here as widgets are added.
     }
 
     function setPropIfDifferent( element, prop, newValue ) {
@@ -210,8 +208,8 @@
         //       display element, looked up within the enclosing
         //       form.
         //   Hi.CONTROLLER_DISPLAY_FORMAT_ATTR  Format string with
-        //       ``{n}`` as the value placeholder, e.g. ``{n}%``,
-        //       ``{n}°``. Optional; defaults to ``{n}``.
+        //       ``{n}`` as the value placeholder, e.g. ``{n}%``.
+        //       Optional; defaults to ``{n}``.
         const selector = slider.getAttribute( Hi.CONTROLLER_DISPLAY_TARGET_ATTR );
         if ( ! selector ) return;
         const $display = $( slider ).closest( 'form' ).find( selector );
@@ -228,7 +226,7 @@
     // ``data-status``, panel-root status attr, etc.) update in lock
     // step with the user's intent, and registered update handlers
     // (dial marker positioning, panel-root ``data-hvac-mode`` sync,
-    // etc.) fire immediately — the polling cycle merely confirms or
+    // etc.) fire immediately -- the polling cycle merely confirms or
     // corrects, never drives the first-frame UI response.
     //
     // The server-bound submit path (antinode's ``onchange-async``
@@ -255,15 +253,15 @@
                 : ( $el.attr( 'data-off-text' ) || 'Off' );
         } else if ( stateId ) {
             // Numeric / hidden-input case: format the optimistic value
-            // by mirroring the existing displayed text — same decimal
+            // by mirroring the existing displayed text -- same decimal
             // precision and same unit suffix. Heuristic, but it keeps
-            // an optimistic "73.0°F" matching the canonical "72.0°F"
+            // an optimistic "73.0F" matching the canonical "72.0F"
             // until the next polling tick reconciles. Backend authority
             // returns on every poll, so a brief divergence here is
             // self-correcting; the goal is just to avoid the visible
             // jump that happens when the optimistic value is
             // unformatted ("73") and polling replaces it with the
-            // formatted version ("73.0°F").
+            // formatted version ("73.0F").
             const $paired = $( '[data-state-id="' + stateId + '"][data-display-text]' )
                   .not( $el ).first();
             if ( $paired.length ) {
@@ -307,7 +305,7 @@
             }
         );
 
-        // Slider drag mirror — keep the paired display in lock-step
+        // Slider drag mirror -- keep the paired display in lock-step
         // with the thumb during user drag. ``input`` fires
         // continuously; ``change`` only fires on release, which
         // would let the displayed value lag behind the thumb.
@@ -321,7 +319,7 @@
         // skip sliders the operator is currently manipulating.
         // Release-side handlers live on ``document`` so a pointer
         // release outside the viewport still bubbles and clears
-        // the flag — listening on body alone would leak the flag
+        // the flag -- listening on body alone would leak the flag
         // if the user dragged the thumb past the page edge.
         $( 'body' ).on(
             'mousedown touchstart pointerdown',

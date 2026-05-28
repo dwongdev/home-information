@@ -1,11 +1,10 @@
 {% load icons %}
 {% comment %}
-Integration health banner — surfaces WARNING / ERROR / DISABLED states
+Integration health banner -- surfaces WARNING / ERROR / DISABLED states
 in any UI that depends on an integration's data. Renders nothing when
 the integration is HEALTHY or when health_status is unavailable.
 
-Parameters (supplied by the ``integration_health_banner`` template
-tag):
+Context:
   health_status      : HealthStatus instance, or None.
   integration_label  : Display label for the integration (e.g.,
                        "Home Assistant").
@@ -15,8 +14,8 @@ tag):
                        stale; controls may not respond.").
 
 Styling defers to HealthStatus.status_alert_class (Bootstrap alert
-variant) and status_icon (icon name) so the visual treatment matches
-the rest of the health-status UI in the application.
+variant) and status_icon (icon name) for consistency with the rest
+of the health-status UI.
 {% endcomment %}
 {% if health_status and not health_status.is_healthy %}
 <div class="alert {{ health_status.status_alert_class }} d-flex align-items-start mb-3 py-2"

@@ -1,4 +1,4 @@
-/* Attribute V2 System Styles - Fresh Start */
+/* Attribute V2 System Styles */
 
 /* Container Structure */
 .attr-v2-container {
@@ -133,7 +133,7 @@
     resize: vertical;
 }
 
-/* Section Titles - Reduced size to match mockup */
+/* Section Titles */
 .attr-v2-section-title {
     font-size: 0.875rem;
     font-weight: 600;
@@ -800,7 +800,7 @@
         flex-wrap: wrap;
     }
     
-    /* Attrribute actions stack vertically */
+    /* Attribute actions stack vertically */
     .attr-v2-attribute-actions {
         flex-direction: column;
         gap: 0.25rem;
@@ -938,7 +938,7 @@
     }
 }
 
-/* Add Attrribute Form */
+/* Add Attribute Form */
 .attr-v2-add-form {
     border: 1px solid var(--line-color);
     border-radius: 0.375rem;
@@ -1159,7 +1159,7 @@
     animation: pulse 2s infinite;
 }
 
-/* Attrribute name dirty styling - fallback approach for broader browser support */
+/* Attribute name dirty styling - fallback approach for broader browser support */
 .attr-v2-attribute-name.has-dirty-indicator {
     font-weight: 600;
     color: var(--warning-color);
@@ -1588,7 +1588,7 @@
     background: rgba(220, 53, 69, 0.05);
 }
 
-/* Attrribute Card Deletion Styling */
+/* Attribute Card Deletion Styling */
 .attr-v2-attribute-card.marked-for-deletion {
     position: relative;
     background: rgba(220, 53, 69, 0.05);
@@ -1633,10 +1633,10 @@
 }
 
 /* ====================================================================== */
-/* ENTITY EDIT MODAL V2 STYLING IMPROVEMENTS                           */
+/* ENTITY EDIT MODAL V2 STYLING                                          */
 /* ====================================================================== */
 
-/* Task 1: Standardize delete icon colors to red */
+/* Delete icon colors standardized to red */
 .attr-v2-attribute-actions .attr-v2-delete-btn {
     color: #dc3545 !important;
     border-color: #dc3545 !important;
@@ -1647,7 +1647,7 @@
     color: white !important;
 }
 
-/* Task 2: Style "Add New Attrribute" form for visual distinction */
+/* "Add New Attribute" form -- visual distinction */
 .attr-v2-new-attribute {
     background-color: rgba(23, 112, 114, 0.05) !important;
     border: 2px dashed rgba(23, 112, 114, 0.3) !important;
@@ -1661,7 +1661,7 @@
 }
 
 
-/* Task 3: Make Add File and Add Attrribute buttons consistent size */
+/* Add File and Add Attribute buttons -- consistent size */
 .attr-v2-action-buttons label.btn {
     min-height: 44px;
     padding: 0.375rem 0.75rem;
@@ -1674,7 +1674,7 @@
     cursor: pointer;
 }
 
-/* Task 4: Make attribute name/labels more prominent than values */
+/* Attribute names/labels -- more prominent than values */
 .attr-v2-attribute-name {
     font-size: 0.9rem !important;
     font-weight: 600 !important;
@@ -1787,14 +1787,14 @@
 }
 
 /* Zero the modal-body's top padding so the sticky search form is flush
-   against the title — otherwise modal-body's default padding-top shows
+   against the title -- otherwise modal-body's default padding-top shows
    scrolling content through the gap above the sticky element. The
    search form supplies its own padding-top for breathing room. */
 .hi-attr-picker .modal-body {
     padding-top: 0;
 }
 
-/* Source banner — always rendered. With one source the button is
+/* Source banner -- always rendered. With one source the button is
    disabled (no caret, no hover affordance) so the visual matches
    the multi-source case structurally but doesn't invite a click
    that does nothing useful. The button face shows the source's

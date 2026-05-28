@@ -9,8 +9,8 @@ from .enums import IntegrationAttributeType, IntegrationCapability
 @dataclass
 class IntegrationMetaData:
 
-    integration_id            : str  # An identifier that must be unique across all integrations
-    label                     : str  # For human-friendly displaying
+    integration_id            : str  # unique across all integrations
+    label                     : str
     attribute_type            : IntegrationAttributeType
     allow_entity_deletion     : bool
     allow_internal_attributes : bool = True
@@ -45,15 +45,12 @@ class IntegrationKey:
     external names/identifiers
     """
 
-    integration_id    : str  # Internally defined unique identifier for the integration source
-    integration_name  : str  # Name or identifier that is used by the external source.
+    integration_id    : str
+    integration_name  : str
 
     def __post_init__(self):
-        # Make matching more robust by canonicalizing both fields.
-        # The exact rule (currently lowercase) lives in normalize() so
-        # external callers comparing raw strings against stored
-        # integration_name values can apply the same rule without
-        # constructing a full IntegrationKey.
+        # Canonicalize both fields so matching is robust against case variation
+        # in external names.
         self.integration_id = self.normalize( self.integration_id )
         self.integration_name = self.normalize( self.integration_name )
         return
@@ -61,13 +58,11 @@ class IntegrationKey:
     @staticmethod
     def normalize( value : str ) -> str:
         """Canonical normalization applied to ``integration_id`` and
-        ``integration_name``. Exposed so callers that need to compare
-        raw strings against stored values can apply exactly the same
-        rule without constructing full IntegrationKey instances. Most
-        comparisons should go through full ``IntegrationKey`` objects
-        and rely on the dataclass's ``__hash__`` / ``__eq__`` (which
-        also use this rule); this static is the escape hatch for
-        cases where a one-shot string normalization is enough."""
+        ``integration_name``. Exposed so callers can apply the same rule when
+        comparing raw strings against stored values, without constructing a
+        full IntegrationKey. Prefer full ``IntegrationKey`` objects when
+        possible (``__hash__`` / ``__eq__`` use this rule); this static is the
+        escape hatch for one-shot string normalization."""
         return value.lower()
     
     def __str__(self):
@@ -96,21 +91,15 @@ class IntegrationKey:
 
 @dataclass
 class IntegrationDetails:
-    """
-    Integration key plus data for cases where additional integration-specific
-    data is needed
-    """
+    """IntegrationKey plus an optional payload of integration-specific data."""
     key      : IntegrationKey
     payload  : Optional[Dict] = None
 
 
 @dataclass
 class IntegrationRemovalSummary:
-    """
-    Classification of an integration's attached entities for the Remove
-    confirmation dialog. Raw counts only; derived values are properties so
-    the object stays consistent.
-    """
+    """Classification of an integration's attached entities: raw counts
+    only, with derived values as properties so the object stays consistent."""
 
     total_count: int
     user_data_count: int
@@ -121,24 +110,16 @@ class IntegrationRemovalSummary:
 
     @property
     def has_mixed_state(self) -> bool:
-        """
-        True when at least one entity has user data. Drives the dialog
-        decision between a single DELETE action and the DELETE SAFE /
-        DELETE ALL variants.
-        """
+        """True when at least one entity has user data."""
         return self.user_data_count > 0
 
 
 @dataclass
 class ConnectionTestResult:
-    """
-    Result from a live integration connection probe.
-
-    Distinct from IntegrationValidationResult, which represents schema-level
-    validation outcomes. ConnectionTestResult specifically reports whether
-    a network probe against the proposed configuration succeeded within a
-    bounded timeout.
-    """
+    """Result from a live integration connection probe (network probe with
+    bounded timeout against the proposed configuration). Distinct from
+    ``IntegrationValidationResult``, which represents schema-level validation
+    outcomes."""
 
     is_success     : bool
     message        : Optional[str] = None
@@ -154,7 +135,6 @@ class ConnectionTestResult:
 
 @dataclass
 class IntegrationValidationResult:
-    """Result from integration configuration validation."""
 
     is_valid       : bool
     status         : HealthStatusType
@@ -168,7 +148,6 @@ class IntegrationValidationResult:
 
     @classmethod
     def success(cls) -> 'IntegrationValidationResult':
-        """Create a successful validation result."""
         return cls(
             is_valid=True,
             status=HealthStatusType.HEALTHY
@@ -176,7 +155,6 @@ class IntegrationValidationResult:
 
     @classmethod
     def error(cls, status: HealthStatusType, error_message: str) -> 'IntegrationValidationResult':
-        """Create an error validation result."""
         return cls(
             is_valid=False,
             status=status,

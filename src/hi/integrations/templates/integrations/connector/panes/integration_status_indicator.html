@@ -1,26 +1,23 @@
 {% load icons %}
 {% comment %}
-Compact integration-status indicator — small icon + tooltip, no label.
+Compact integration-status indicator -- small icon + tooltip, no label.
 Composes HealthStatus, the integration's is_paused flag, and the
-Issue #283 sync-check state into a single attention-grabbing glyph
-for the sidebar nav-tab.
+sync-check state into a single attention-grabbing glyph.
 
-Parameters:
+Context:
   health_status      : HealthStatus instance (required).
-  is_paused          : bool — integration's is_paused flag (required).
-  sync_check_result  : SyncCheckResult or None (optional) — Issue #283
-                       sync-check state for this integration.
+  is_paused          : bool -- integration's is_paused flag (required).
+  sync_check_result  : SyncCheckResult or None (optional) -- sync-check
+                       state for this integration.
 
 Visual priority (worst-of):
   ERROR > WARNING > paused > needs-sync
-HEALTHY-and-not-paused-and-in-sync renders nothing — sidebar should
-be visually clean when there is nothing to draw the operator's
-attention to.
+HEALTHY-and-not-paused-and-in-sync renders nothing.
 
-DISABLED is intentionally not handled — disabled integrations are
-excluded from the sidebar tab list upstream.
+DISABLED is intentionally not handled -- disabled integrations are
+excluded from the tab list upstream.
 
-UNKNOWN is intentionally not handled — initialization edge, transient.
+UNKNOWN is intentionally not handled -- initialization edge, transient.
 {% endcomment %}
 {% if health_status %}
 {% with status=health_status.status %}

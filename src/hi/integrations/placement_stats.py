@@ -35,9 +35,9 @@ from hi.apps.entity.entity_placement import EntityPlacementInput
 logger = logging.getLogger(__name__)
 
 
-# Default viability thresholds. Tuned for the tens-of-items import
-# batches the placement modal sees today. Exposed as constants so
-# callers can read them and override individual ones per-call.
+# Default viability thresholds tuned for the tens-of-items batches
+# typical of integration imports. Exposed as constants so callers can
+# read them and override individual ones per-call.
 DEFAULT_MIN_COVERAGE      : float = 0.5   # at least half the items must land in a named group
 DEFAULT_MIN_GROUP_COUNT   : int   = 2     # at least two distinct groups
 DEFAULT_MAX_GROUP_COUNT   : int   = 15    # too many groups overwhelms the modal
@@ -49,11 +49,10 @@ DEFAULT_MAX_CONCENTRATION : float = 0.9   # a single group holding >90% isn't gr
 class PlacementGroupingStats:
     """Single-pass measurements over an ``EntityPlacementInput``.
 
-    "Grouped items" are items in any named group, including a
-    fallback group like "Untagged". "Ungrouped items" are items
-    in ``EntityPlacementInput.ungrouped_items`` — the items the
-    modal renders under its built-in 'Other items' section, which
-    by convention means the integration found no signal for them.
+    "Grouped items" are items in any named group, including a fallback
+    group like "Untagged". "Ungrouped items" are items in
+    ``EntityPlacementInput.ungrouped_items`` -- by convention, items for
+    which the integration found no signal.
     """
     total_items         : int
     grouped_items       : int
@@ -70,9 +69,8 @@ class PlacementGroupingStats:
 
     @property
     def concentration(self) -> float:
-        """Largest group size as a fraction of grouped items. Close
-        to 1.0 means one dominant group — the strategy isn't really
-        partitioning."""
+        """Largest group size as a fraction of grouped items. Close to 1.0
+        means one dominant group -- the strategy isn't really partitioning."""
         if self.grouped_items == 0:
             return 0.0
         return self.largest_group_size / self.grouped_items

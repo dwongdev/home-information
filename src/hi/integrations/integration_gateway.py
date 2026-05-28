@@ -20,69 +20,47 @@ from hi.integrations.transient_models import (
 
 
 class IntegrationGateway:
-    """
-    Each integration needs to provide an Integration Manager that implements these methods.
-    """
+    """Subclassed by each integration to expose its lifecycle and capability hooks."""
 
     def get_metadata(self) -> IntegrationMetaData:
         raise NotImplementedError('Subclasses must override this method')
 
     def notify_settings_changed(self):
-        """
-        This method is called when Integration or IntegrationAttribute models
-        are modified. Each integration should implement this to reload its
-        configuration and notify any dependent components.
-        """
+        """Called when Integration or IntegrationAttribute models are
+        modified. Subclass implementations should reload configuration and
+        notify dependent components."""
         raise NotImplementedError('Subclasses must override this method')
 
     def get_connector(self) -> Optional[IntegrationConnector]:
-        """
-        Return the integration's connector when it supports sync;
-        None otherwise. Sync is an opt-in capability — not every
-        integration requires one. The framework owns the sync workflow
-        (pre-sync confirmation, sync execution, post-sync placement);
-        the connector participates by providing the integration-
-        specific work plus a small amount of peripheral metadata.
+        """Return the integration's connector when it supports the CONNECT
+        capability; None otherwise. The framework owns the sync workflow;
+        the connector supplies the integration-specific work and metadata.
 
-        The Issue #283 sync-check probe also rides on the connector
-        (see ``IntegrationConnector.check_needs_sync``): integrations
-        without a connector naturally opt out of both full sync and
-        the periodic drift check.
-        """
+        Integrations without a connector opt out of both full sync and the
+        periodic drift check (the sync-check probe rides on the connector)."""
         return None
 
     def get_importer(self) -> Optional[IntegrationImporter]:
-        """
-        Return the integration's importer when it supports the IMPORT
-        capability; None otherwise. Parallel to get_connector() for
-        the CONNECT capability. The framework owns the import workflow
-        (Data Import page, preview, confirm, result modal, placement);
-        the importer supplies the integration-specific candidate
-        listing, item ingest, and discard operations.
-        """
+        """Return the integration's importer when it supports the IMPORT
+        capability; None otherwise. The framework owns the import workflow;
+        the importer supplies integration-specific candidate listing, item
+        ingest, and discard operations."""
         return None
 
     def get_attribute_referencer(self) -> Optional[IntegrationAttributeReferencer]:
-        """
-        Return the integration's attribute-referencer when it
-        supports the ATTRIBUTE_REFERENCE capability; None otherwise.
-        Parallel to get_connector() and get_importer(). The
-        framework owns the picker UI and the TEXT-attribute attach
-        lifecycle; the referencer supplies the integration-specific
-        search-against-upstream operation.
-        """
+        """Return the integration's attribute-referencer when it supports the
+        ATTRIBUTE_REFERENCE capability; None otherwise. The framework owns
+        the picker and the TEXT-attribute attach lifecycle; the referencer
+        supplies the integration-specific search-against-upstream operation."""
         return None
 
     def validate_configuration(
             self,
             integration_attributes: List[IntegrationAttribute]
     ) -> IntegrationValidationResult:
-        """
-        Schema-only validation of the proposed configuration. Must NOT
-        perform network operations. Returns success if the attribute set
-        is structurally usable; returns an error otherwise. For live
-        access validation, see validate_access().
-        """
+        """Schema-only validation of the proposed configuration. Must NOT
+        perform network operations. For live access validation, see
+        ``validate_access``."""
         raise NotImplementedError('Subclasses must override this method')
 
     def validate_access(
@@ -90,27 +68,21 @@ class IntegrationGateway:
             integration_attributes: List[IntegrationAttribute],
             timeout_secs: Optional[float],
     ) -> ConnectionTestResult:
-        """
-        Live probe to validate access to the upstream system using the
-        proposed configuration. Must respect the bounded timeout. Used
-        at attribute-save time (Configure / Reconfigure) and before
-        relaunching monitors (Resume).
-        """
+        """Live probe to validate access to the upstream system using the
+        proposed configuration. Must respect the bounded timeout."""
         raise NotImplementedError('Subclasses must override this method')
 
     def group_entities_for_placement(
             self, entities: List[Entity],
     ) -> EntityPlacementInput:
-        """Partition the given entities into the EntityPlacementInput
-        shape consumed by the placement modal. Capability-neutral —
-        both Connect-sync and Import-run flows feed entities through
-        this same method, so a given integration groups its entities
-        the same way regardless of how they arrived.
+        """Partition the given entities into the EntityPlacementInput shape
+        consumed by placement. Capability-neutral -- both sync and import
+        flows feed entities through this method, so a given integration
+        groups its entities the same way regardless of how they arrived.
 
-        Default: group by ``EntityGroupType`` rollup using the
-        rollup's humanized label as the group name. Subclasses
-        override when a different domain grouping makes sense
-        (e.g., HomeBox's Location/Tag/Type fallback)."""
+        Default: group by ``EntityGroupType`` rollup using the rollup's
+        humanized label as the group name. Subclasses override when a
+        different domain grouping makes sense."""
         return PlacementInputBuilder.by_entity_type_group(
             entities    = entities,
             item_key_fn = self._placement_item_key,

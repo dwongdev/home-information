@@ -202,11 +202,9 @@ class ConnectorConfigureView( CapabilityConfigureView, ConnectorViewMixin ):
                 f'{integration_data.integration_id}: {e}'
             )
 
-        # Phase 7 collapse: when the integration supports sync, run it
-        # right here and render the sync-result modal directly. The
-        # previous Configure → Pre-Sync → Sync handshake is now one
-        # CONNECT click. Connector-less integrations keep the
-        # original redirect-to-manage behavior.
+        # When the integration supports sync, run it inline and render
+        # the sync-result modal directly so CONNECT is one click.
+        # Connector-less integrations redirect to the manage page.
         connector = integration_data.integration_gateway.get_connector()
         if connector is not None:
             return self.render_sync_result(

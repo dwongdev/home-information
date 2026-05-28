@@ -18,20 +18,6 @@ ALL_CAPABILITIES = frozenset( IntegrationCapability )
 
 
 class IntegrationDisableMode( LabeledEnum ):
-    """
-    Mode used when removing (disabling) an integration. Controls how the
-    integration's attached entities are handled.
-
-    SAFE — delete entities without user-created data; preserve entities with
-    user-created data by detaching them from the integration (strips
-    integration association, removes integration-only components, records
-    the previous integration identity to drive the "From ..." UI
-    badge and the auto-reconnect path). This mirrors the sync-time
-    preservation behavior.
-
-    ALL  — hard-delete all entities attached to the integration regardless of
-    user-created data.
-    """
 
     SAFE = ( 'Delete Safe',
              'Delete entities without user data; preserve those with user data' )
@@ -44,7 +30,7 @@ class IntegrationDisableMode( LabeledEnum ):
 
 
 class IntegrationAttributeType( LabeledEnum ):
-    """ Abstract base class for integrations ot define the required attributes they need. """
+    """Base for per-integration attribute-type enums."""
 
     def __init__( self,
                   label             : str,

@@ -1,39 +1,22 @@
 """
-Placement view request shape — parsing the inputs, encoding the
-outputs.
+Placement view request shape -- parsing the inputs, encoding the outputs.
 
-The placement modal carries two related concerns that this module
-owns:
+This module owns two related concerns for the placement modal:
 
-* ``PlacementUrlParams`` — the URL/form-param contract
-  (``is_initial_connect``, ``entity_ids``). Single source of truth
-  for key names and value encodings; build URLs and parse requests
-  via this class rather than handling raw strings.
+* ``PlacementUrlParams`` -- the URL/form-param contract.
+* ``PlacementFormParser`` -- the placement-form-body parser, including
+  the three-level inheritance (top default -> group default -> per-entity)
+  and the sentinel/tag wire format used in the form-value dropdowns:
 
-* ``PlacementFormParser`` — the placement-form-body parser. The
-  placement modal carries a three-level inheritance: top default
-  → group default → per-entity. Empty selections at any level
-  inherit from the parent; explicit ``__skip__`` overrides
-  inheritance with "don't place this entity"; a top-level
-  ``__new_view__`` value creates one fresh ``LocationView`` named
-  after the integration; a top-level ``__new_collection__`` value
-  creates one fresh ``Collection``. Group/entity overrides to
-  existing views or collections remain in effect even when the
-  top is one of the new-* sentinels.
+    ``view:<id>``           -- existing LocationView
+    ``collection:<id>``     -- existing Collection
+    ``__new_view__``        -- create one fresh LocationView (top only)
+    ``__new_collection__``  -- create one fresh Collection (top only)
+    ``__skip__``            -- explicit no-op overriding parent
+    ``''``                  -- inherit from parent (top -> skip-all)
 
-  Form values for the dropdowns are *tagged* so views and
-  collections can share the same select element without colliding
-  on numeric ids:
-
-    ``view:<id>``        — existing LocationView
-    ``collection:<id>``  — existing Collection
-    ``__new_view__``     — create one fresh LocationView (top only)
-    ``__new_collection__`` — create one fresh Collection (top only)
-    ``__skip__``         — explicit no-op overriding parent
-    ``''``               — inherit from parent (top → skip-all)
-
-  ``parse(request, integration_data)`` returns a list of
-  ``PlacementDecision`` values for the placement service to apply.
+  Group/entity overrides to existing views or collections remain in
+  effect even when the top is one of the new-* sentinels.
 """
 import logging
 from dataclasses import dataclass, field
@@ -57,16 +40,13 @@ logger = logging.getLogger(__name__)
 class PlacementUrlParams:
     """Encoded contract for the placement view's URL/form params.
 
-    Single source of truth for key names, value encodings, and
-    list separators — callers build URLs and parse requests via
-    this class rather than handling raw strings. Renaming a key
-    or changing an encoding happens in exactly one place.
+    Single source of truth for key names, value encodings, and list
+    separators -- callers build URLs and parse requests via this class
+    rather than handling raw strings.
 
-    Scope: the URL query params (``?is_initial_connect=…&entity_ids=…``)
-    and the matching hidden form fields the placement modal POSTs
-    back. Does *not* cover the per-entity / per-group form fields
-    consumed by ``PlacementFormParser`` — those have their own
-    contract owned by that parser.
+    Scope: the URL query params (``?is_initial_connect=...&entity_ids=...``)
+    and matching hidden form fields. Does *not* cover the per-entity /
+    per-group form fields consumed by ``PlacementFormParser``.
     """
 
     KEY_IS_INITIAL_CONNECT = 'is_initial_connect'
@@ -79,8 +59,7 @@ class PlacementUrlParams:
     entity_ids        : List[int]   = field(default_factory=list)
 
     def to_query_dict(self) -> Dict[str, str]:
-        """Sparse query dict — keys are omitted when their value
-        is the default, keeping URLs free of redundant
+        """Sparse query dict -- defaults are omitted, keeping URLs free of
         ``?is_initial_connect=0`` cruft."""
         result : Dict[str, str] = {}
         if self.is_initial_connect:
@@ -98,9 +77,8 @@ class PlacementUrlParams:
         return f'{base_url}?{urlencode(qd)}' if qd else base_url
 
     def is_initial_connect_form_value(self) -> str:
-        """The hidden-form-field encoding of ``is_initial_connect``
-        for templates that need to round-trip the flag through a
-        POST."""
+        """Hidden-form-field encoding of ``is_initial_connect`` for round-trip
+        through a POST."""
         return self.TRUE_VALUE if self.is_initial_connect else self.FALSE_VALUE
 
     @classmethod
@@ -148,7 +126,6 @@ class PlacementFormParser:
             integration_data = integration_data,
         )
 
-        # Discover group indices by scanning POST keys.
         group_indices = sorted({
             int(k.split('_')[2])
             for k in request.POST.keys()
@@ -185,7 +162,7 @@ class PlacementFormParser:
                     entity = entity, target = entity_target,
                 ) )
 
-        # Ungrouped items: no group level — entity inherits from top.
+        # Ungrouped items: no group level -- entity inherits from top.
         ungrouped_ids = request.POST.getlist( 'ungrouped_entity_ids' )
         if ungrouped_ids:
             ungrouped = list( Entity.objects.filter(
@@ -229,15 +206,9 @@ class PlacementFormParser:
                              collection_lookup : dict,
                              integration_data,
                              ) -> Tuple[Optional[LocationView], Optional[Collection]]:
-        """Top-level form value → (location_view, collection) target.
-
-        Top values: ''=skip-all, '__new_view__'=create fresh view,
-        '__new_collection__'=create fresh collection,
-        'view:<id>'=existing view, 'collection:<id>'=existing
-        collection. Creating a new view/collection is the side
-        effect of the corresponding sentinel; the new object
-        becomes the top default for everything else.
-        """
+        """Top-level form value -> (location_view, collection) target. Creating
+        a new view/collection is the side effect of the corresponding sentinel;
+        the new object then becomes the top default for everything else."""
         if top_value == cls.FORM_VALUE_NEW_VIEW:
             return cls._create_new_view(
                 request = request, integration_data = integration_data,
@@ -262,12 +233,10 @@ class PlacementFormParser:
             view_lookup        : dict,
             collection_lookup  : dict,
     ) -> Tuple[Optional[LocationView], Optional[Collection]]:
-        """Group/entity form value → (location_view, collection)
-        target. Empty inherits from parent; '__skip__' overrides
-        any inherited parent value with skip; otherwise it's a
-        tagged existing-target id ('view:<id>' or 'collection:<id>').
-        Group/entity dropdowns do not offer the new-* sentinels —
-        only the top level can create a new target."""
+        """Group/entity form value -> (location_view, collection) target.
+        Empty inherits from parent; ``__skip__`` overrides inheritance.
+        Group/entity dropdowns do not offer the new-* sentinels -- only the
+        top level can create a new target."""
         if form_value == '':
             return parent_target
         if form_value == cls.FORM_VALUE_SKIP:
@@ -299,10 +268,9 @@ class PlacementFormParser:
 
     @classmethod
     def _create_new_view( cls, request, integration_data ) -> LocationView:
-        """Create a single LocationView named after the integration
-        label, attached to the operator's current default Location.
-        ``LocationManager.create_location_view`` handles name
-        collisions via its built-in disambiguation."""
+        """Create a single LocationView named after the integration label,
+        attached to the operator's current default Location. Name collisions
+        are handled by LocationManager's built-in disambiguation."""
         try:
             location = LocationManager().get_default_location( request = request )
         except Location.DoesNotExist:
@@ -316,9 +284,8 @@ class PlacementFormParser:
 
     @classmethod
     def _create_new_collection( cls, integration_data ) -> Collection:
-        """Create a single Collection named after the integration
-        label. ``CollectionManager.create_collection`` handles name
-        collisions via its built-in disambiguation."""
+        """Create a single Collection named after the integration label. Name
+        collisions are handled by CollectionManager's built-in disambiguation."""
         return CollectionManager().create_collection(
             name = integration_data.label,
         )

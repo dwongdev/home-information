@@ -35,18 +35,17 @@ class CapabilityConfigureView( HiModalView,
     """Base for the per-capability credentials Configure modal.
 
     Subclasses set the four class-level constants and override
-    ``handle_post_success`` to define what happens after credentials
-    save. The base owns:
-      * the GET render flow (block check → ensure_all_attributes_exist →
-        build edit context → render modal)
-      * the POST save flow (post_attribute_form → delegate to subclass)
+    ``handle_post_success`` to define what happens after credentials save.
+    The base owns:
+      * the GET render flow (block check -> ensure_all_attributes_exist ->
+        build edit context -> render modal)
+      * the POST save flow (post_attribute_form -> delegate to subclass)
       * the ``validate_attributes_extra`` hook for AttributeEditViewMixin.
 
-    Subclasses own the timing of ``notify_settings_changed()`` because
-    the right moment is capability-specific: Connect-side managers
-    gate client (re)build on ``integration.is_enabled``, so the notify
-    must fire AFTER ``enable_integration``; Import flows fire it
-    before reading candidates.
+    Subclasses own the timing of ``notify_settings_changed()`` because the
+    right moment is capability-specific: Connect-side managers gate client
+    (re)build on ``integration.is_enabled``, so the notify must fire AFTER
+    ``enable_integration``; Import flows fire it before reading candidates.
     """
 
     capability    : IntegrationCapability  = None
@@ -58,11 +57,10 @@ class CapabilityConfigureView( HiModalView,
         return self.template_name
 
     def get_capability_gateway( self, integration_data ):
-        """Return the ``CapabilityGateway`` instance for this configure
-        view's capability. Subclasses implement by calling the
-        appropriate per-capability getter on the gateway. The base
-        class deliberately does not enumerate capabilities — each
-        subclass already knows its own."""
+        """Return the ``CapabilityGateway`` instance for this configure view's
+        capability. Subclasses implement by calling the appropriate
+        per-capability getter on the gateway. The base deliberately does not
+        enumerate capabilities -- each subclass already knows its own."""
         raise NotImplementedError('Subclasses must override this method')
 
     def _build_attr_item_context( self, integration_data ):
@@ -127,7 +125,6 @@ class CapabilityConfigureView( HiModalView,
                                    attr_item_context,
                                    regular_attributes_formset,
                                    request ):
-        """ Override for AttributeEditViewMixin """
         self.validate_attributes_extra_helper(
             attr_item_context,
             regular_attributes_formset,
@@ -138,21 +135,19 @@ class CapabilityConfigureView( HiModalView,
 
 class IntegrationPlacementView( HiModalView, IntegrationViewMixin,
                                 IntegrationPlacementViewMixin ):
-    """Placement modal — single CBV handling both the GET (render)
-    and POST (form submission) paths on one URL.
+    """Placement modal -- single CBV handling both the GET (render) and
+    POST (form submission) paths on one URL.
 
     GET queries currently-unplaced entities for the integration
-    (optionally scoped by ``entity_ids`` URL param), runs them
-    through the connector's ``group_entities_for_placement``,
-    and renders the placement modal. Empty result falls back to
-    a brief acknowledgement modal so the operator isn't dropped
-    onto an empty placement.
+    (optionally scoped by ``entity_ids`` URL param), runs them through
+    the connector's ``group_entities_for_placement``, and renders the
+    placement modal. Empty result falls back to a brief acknowledgement
+    modal so the operator isn't dropped onto an empty placement.
 
-    POST processes the placement form. The form has two submit
-    buttons — APPLY and NOT NOW — sharing ``name="action"`` with
-    distinct values; this view branches on the value to render
-    either the post-dispatch summary modal (apply path) or the
-    dismiss-confirm modal (not-now path).
+    POST processes the placement form. The form has two submit buttons
+    sharing ``name="action"`` with distinct values (apply vs dismiss);
+    this view branches on the value to render either the post-dispatch
+    summary modal or the dismiss-confirm modal.
     """
 
     DISMISS_ACTION_VALUE = 'dismiss'
@@ -173,10 +168,9 @@ class IntegrationPlacementView( HiModalView, IntegrationViewMixin,
         entities = EntityPlacementService.query_unplaced_entities(
             integration_id = integration_data.integration_id,
         )
-        # When the caller scoped the URL to specific entity ids
-        # (sync-result CTA), narrow the unplaced set to those.
-        # Without scoping, the placement operates on the full
-        # unplaced set for the integration (recovery flow).
+        # When the caller scoped the URL to specific entity ids, narrow the
+        # unplaced set to those. Without scoping, the placement operates on the
+        # full unplaced set for the integration.
         if entity_id_filter is not None:
             entities = [ e for e in entities if e.id in entity_id_filter ]
 
@@ -225,11 +219,10 @@ class IntegrationPlacementView( HiModalView, IntegrationViewMixin,
 
     @staticmethod
     def _extract_placement_entity_ids( request ):
-        """Pull the entity ids the placement form just posted.
-        The placement renders ``all_group_<i>_entity_ids`` per
-        group plus a single ``ungrouped_entity_ids`` field — both
-        carry the entity ids regardless of whether the operator
-        opened any drill-down."""
+        """Pull the entity ids the placement form just posted. The form
+        renders ``all_group_<i>_entity_ids`` per group plus a single
+        ``ungrouped_entity_ids`` field -- both carry the entity ids regardless
+        of whether the operator opened any drill-down."""
         ids = []
         for key, values in request.POST.lists():
             if key == 'ungrouped_entity_ids' or (
@@ -245,10 +238,9 @@ class IntegrationPlacementView( HiModalView, IntegrationViewMixin,
 
     def _render_empty( self, request, integration_data,
                        connector, is_initial_connect : bool ):
-        """No-unplaced-items acknowledgement: render the result
-        modal with the integration's icon + a brief 'no items'
-        info note rather than an empty placement. Counts stay
-        zero so the modal lead reads 'Nothing new.'"""
+        """No-unplaced-items acknowledgement: render the result modal with
+        the integration's icon and a brief 'no items' info note rather than
+        an empty placement."""
         sync_result = IntegrationSyncResult(
             title = connector.get_result_title(
                 is_initial_connect = is_initial_connect,
@@ -267,12 +259,9 @@ class IntegrationPlacementView( HiModalView, IntegrationViewMixin,
 
 
 class IntegrationRefineView( View ):
-    """
-    Convenience entry to edit-mode for a specific LocationView,
-    used by the post-dispatch modal's REFINE button(s). Sets the
-    session's current LocationView, flips view mode to EDIT, and
-    redirects to the location view page.
-    """
+    """Convenience entry to edit-mode for a specific LocationView. Sets the
+    session's current LocationView, flips view mode to EDIT, and redirects
+    to the location view page."""
 
     def get(self, request, *args, **kwargs):
         try:
@@ -327,7 +316,6 @@ class IntegrationAttributeHistoryInlineView( View,
 class IntegrationAttributeRestoreInlineView( View,
                                              IntegrationViewMixin,
                                              AttributeEditViewMixin ):
-    """View for restoring IntegrationAttribute values from history inline."""
 
     def get(self, request, integration_id, attribute_id, history_id, *args, **kwargs):
         """ Need to do restore in a GET since nested in main form and cannot have a form in a form """

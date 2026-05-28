@@ -9,7 +9,7 @@
         'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
     // The connection manager treats both markers as the same kind of
-    // long-lived MJPEG fetch — both need explicit cleanup on DOM
+    // long-lived MJPEG fetch -- both need explicit cleanup on DOM
     // removal so browser per-host connection slots are released. The
     // markers themselves are disjoint by content type:
     //   - ``data-video-stream``    : continuous live MJPEG (camera).
@@ -23,7 +23,7 @@
     // the document.
     //
     // Responsibilities split with antinode:
-    //   - Antinode fires ``beforeAsyncRender($target)`` immediately
+    //   - Antinode fires ``beforeContentRemoval($subtree)`` immediately
     //     before replacing a subtree. We register a callback that
     //     force-closes any tracked streams within the outgoing
     //     subtree by swapping ``src`` to a 1x1 transparent GIF. This
@@ -60,9 +60,6 @@
             this.streams.delete( element );
         },
 
-        // Walk the outgoing subtree and force-close every marked
-        // element within it. Called by antinode's beforeAsyncRender
-        // hook before content is replaced.
         closeWithin: function( $scope ) {
             if ( ! $scope || ! $scope.find ) return;
             const manager = this;
@@ -71,8 +68,6 @@
             });
         },
 
-        // Re-derive the tracked set from the live DOM. Drops removed
-        // elements, registers newly-attached ones.
         reconcile: function() {
             for ( const element of Array.from( this.streams )) {
                 if ( ! document.contains( element )) {
@@ -97,10 +92,8 @@
 
     // Polls ``[data-video-snapshot]`` <img> elements at their declared
     // ``data-stream-fps`` to synthesize a live feed from a still-image
-    // endpoint (HA cameras and any future integration that offers a
-    // snapshot URL but no native stream). Pauses while the tab is
-    // hidden so bandwidth isn't spent rendering frames the user can't
-    // see.
+    // endpoint (HA cameras, etc.). Pauses while the tab is hidden so
+    // bandwidth isn't spent rendering frames the user can't see.
     //
     // Marker contract:
     //   - ``data-video-snapshot``     : presence opts the <img> into polling.
@@ -224,9 +217,8 @@
         REGISTERED_FLAG: 'videoErrorHandlerRegistered',
 
         // Heading + subtitle per marker. Mirrors the server-rendered
-        // ``.video-placeholder`` markup in entity_video_sensor_history.html
-        // for the no-source case, so the failed-to-load and no-data cases
-        // look visually identical.
+        // ``.video-placeholder`` markup for the no-source case, so the
+        // failed-to-load and no-data cases look visually identical.
         MESSAGES: {
             'data-video-stream': {
                 heading: 'Live View Unavailable',
@@ -321,13 +313,11 @@
         }
     };
 
-    // Video Timeline Scrollbar Management
     const VideoTimelineScrollManager = {
         init: function() {
             this.timeline = document.getElementById('event-timeline');
             if (!this.timeline) return;
 
-            // Handle initial page loads - scroll to active item if needed
             this.handleInitialLoad();
 
         },
@@ -336,14 +326,11 @@
             const activeItem = this.timeline.querySelector('.timeline-item.active');
             if (!activeItem) return;
 
-            // Check if coming from live stream
             const fromLive = sessionStorage.getItem('navigatingFromLiveStream');
             if (fromLive) {
                 sessionStorage.removeItem('navigatingFromLiveStream');
-                // Force scroll to active item - should start at top (case D)
                 setTimeout(() => this.scrollToItem(activeItem, 'from-live'), 50);
             } else if (!window.videoTimelineInitialized) {
-                // First time loading - center active item (case A)
                 window.videoTimelineInitialized = true;
                 setTimeout(() => this.scrollToItem(activeItem, 'initial'), 50);
             }
@@ -377,7 +364,7 @@
                     });
                 }
             } else if (context === 'from-live') {
-                // For "Recent Event" button, scroll to top (case D)
+                // For from-live navigation, scroll to top
                 timeline.scrollTo({
                     top: 0,
                     behavior: 'auto'
@@ -433,7 +420,6 @@
         }
     };
 
-    // Initialize when DOM is ready
     function initVideoSubsystems() {
         VideoTimelineScrollManager.init();
         VideoTimelineScrollManager.tagCurrentVideoWithEventId();
@@ -448,10 +434,10 @@
     }
 
     // Hook into antinode lifecycle. ``beforeContentRemoval`` runs
-    // before any subtree is detached — HTML content swap or modal
-    // dismissal — with the outgoing subtree. That's where we close
+    // before any subtree is detached -- HTML content swap or modal
+    // dismissal -- with the outgoing subtree. That's where we close
     // stream connections cleanly. ``afterAsyncRender`` and
-    // ``afterModalRender`` run after content is in the DOM — that's
+    // ``afterModalRender`` run after content is in the DOM -- that's
     // where we reconcile our tracked set against the new state.
     function registerHook( hookName, fn ) {
         if ( typeof window.AN === 'object'
@@ -475,13 +461,11 @@
         VideoErrorHandler.reconcile();
     });
 
-    // Cleanup on page unload to free connections and stop pollers
     window.addEventListener('beforeunload', () => {
         VideoConnectionManager.cleanup();
         SnapshotStreamManager.cleanup();
     });
 
-    // Also cleanup on navigation away from video pages
     window.addEventListener('pagehide', () => {
         VideoConnectionManager.cleanup();
         SnapshotStreamManager.cleanup();
@@ -497,7 +481,7 @@
     // cached original URL on each click. The browser sees a new URL,
     // abandons the previous fetch, and starts a new one. ZoneMinder
     // serves the clip from the start on each request
-    // (``replay=single``). Avoids blanking the ``src`` — an empty
+    // (``replay=single``). Avoids blanking the ``src`` -- an empty
     // src would fire ``error`` and trigger ``VideoErrorHandler``'s
     // placeholder.
     function videoClipReplayBuster( baseUrl ) {
@@ -540,7 +524,6 @@
     });
 
 
-    // Expose for potential external use and debugging
     window.VideoTimelineScrollManager = VideoTimelineScrollManager;
     window.VideoConnectionManager = VideoConnectionManager;
     window.SnapshotStreamManager = SnapshotStreamManager;

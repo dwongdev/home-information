@@ -1,10 +1,9 @@
 {% comment %}
 Attribute-form action-bar fragment for the CONNECT capability:
 health-status badge linking to the health-detail modal. Rendered
-when ``health_status`` is in scope (the CONNECT manage view passes
-it; modals that include this body do not).
+only when ``health_status`` is in scope.
 
-Context (inherited from the surrounding edit body):
+Context:
   health_status     : HealthStatus (optional)
   integration_data  : IntegrationData (required)
 {% endcomment %}

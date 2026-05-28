@@ -3,20 +3,19 @@
   Shared CONNECT / UPDATE framework action.
 
   Sync is a framework concern; integrations participate by providing an
-  IntegrationConnector from their gateway's get_connector().
-  Rendering is conditional on (a) the integration being enabled and
-  (b) the gateway returning a connector. Integrations whose gateway
-  returns None (sync is opt-in) get no button.
+  IntegrationConnector from their gateway's get_connector(). Rendering
+  is conditional on (a) the integration being enabled and (b) the
+  gateway returning a connector. Integrations whose gateway returns
+  None (sync is opt-in) get no button.
 
   Label flips on `core.has_entities`: CONNECT for the first-time path,
-  UPDATE for subsequent re-syncs. The framework manage
-  view computes has_entities into the `core` context.
+  UPDATE for subsequent re-syncs.
 
-  When the Issue #283 sync-check probe has detected upstream drift
-  (`core.sync_check_result.needs_sync`), the update-check variant
-  promotes from outline-secondary to solid btn-primary so it pulls
-  the eye. The CONNECT variant is always primary since there is
-  nothing to compare against on a first run.
+  When the sync-check probe has detected upstream drift
+  (`core.sync_check_result.needs_sync`), the update variant promotes
+  from outline-secondary to solid btn-primary so it pulls the eye.
+  The CONNECT variant is always primary since there is nothing to
+  compare against on a first run.
 {% endcomment %}
 {% if core.integration_data.is_enabled and core.integration_data.integration_gateway.get_connector %}
 <a href="{% url 'integrations_connect_pre_sync' integration_id=core.integration_data.integration_id %}"

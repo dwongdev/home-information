@@ -1,10 +1,3 @@
-"""
-Integration Attribute Edit Context - Integration-specific context for attribute editing templates.
-
-This module contains Integration-specific implementations of the AttributeItemEditContext
-pattern, encapsulating integration-specific domain knowledge while maintaining
-the generic template interface.
-"""
 from typing import Any, Dict, Optional, Type
 
 from django.forms import ModelForm, BaseInlineFormSet
@@ -24,16 +17,10 @@ from .integration_data import IntegrationData
 
 class IntegrationAttributeItemEditContext(AttributeItemEditContext):
     """
-    Integration-specific context provider for attribute editing templates.
-
-    This class encapsulates Integration-specific knowledge while providing
-    the generic interface expected by attribute editing templates.
-
-    Construction takes the active ``CapabilityGateway`` directly (rather
-    than the capability enum). The instance carries both the capability
-    identity (``capability_gateway.capability``) used for attribute
-    filtering and the capability-specific UI hooks (description,
-    attribute-form action template) the rendered templates consult.
+    Constructed with the active ``CapabilityGateway`` directly (not the
+    capability enum), so the instance carries both the capability identity
+    used for attribute filtering and the capability-specific UI hooks
+    (description, attribute-form action template).
     """
 
     def __init__( self,
@@ -47,11 +34,9 @@ class IntegrationAttributeItemEditContext(AttributeItemEditContext):
         super().__init__( owner_type = 'integration', owner = integration_data.integration )
         self.integration_data = integration_data
         self._capability_gateway = capability_gateway
-        # capability_gateway may be None in legacy paths (e.g., an
-        # integration declares a capability metadata-side but
-        # exposes no implementation instance). The attribute
-        # queryset falls back to "no capability filter" in that
-        # case, which preserves existing behavior.
+        # capability_gateway may be None when an integration declares a
+        # capability metadata-side but exposes no implementation instance;
+        # the attribute queryset then falls back to no capability filter.
         self._capability = (
             capability_gateway.capability if capability_gateway is not None else None
         )
@@ -64,7 +49,6 @@ class IntegrationAttributeItemEditContext(AttributeItemEditContext):
     
     @property
     def integration(self) -> Integration:
-        """Get the Integration instance (typed accessor)."""
         return self.owner
     
     @property
@@ -121,12 +105,12 @@ class IntegrationAttributeItemEditContext(AttributeItemEditContext):
 
     @property
     def attribute_upload_form_class(self) -> Type[AttributeUploadForm]:
-        # No file uploads for Integration attributes (as of yet)
+        # No file uploads for Integration attributes.
         return None
     
     @property
     def file_upload_url(self) -> str:
-        # No file uploads for Integration attributes (as of yet)
+        # No file uploads for Integration attributes.
         return None
     
     def to_template_context(self) -> Dict[str, Any]:

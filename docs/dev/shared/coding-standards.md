@@ -13,6 +13,7 @@ Checklists for writing and reviewing code.
 - [ ] The file ends with a newline
 - [ ] All new files follow the project structure's name and location conventions.
 - [ ] There are no Emoji's in any code, templates or documentation.
+- [ ] All comments and docstrings use ASCII only (no em/en dashes, smart quotes, arrows, degree symbols, ellipses, etc.).
 
 **Imports**:
 - [ ] All module imports are at the top of the file.
@@ -245,6 +246,25 @@ The project uses two different flake8 configurations:
   - **E251**: We use spaces around keyword parameters for consistency
   - **Note**: These are deliberate choices for improved code readability, not oversights
 - CI Configuration (`src/.flake8-ci`): GitHub Actions enforces these standards and blocks PR merging if violations exist.
+
+### ASCII-Only in Comments and Docstrings
+
+Comments and docstrings use ASCII only. The benefits of visually-precise Unicode characters (em dashes, arrows, degree symbols) are outweighed by the costs: inconsistent rendering across terminals / diff viewers / editor configs; broken `grep` for anyone typing the ASCII equivalent; copy-paste mismatches between source and rendered docs; and visual ambiguity between similar-looking characters.
+
+Common substitutions:
+
+| Unicode | ASCII |
+|---------|-------|
+| `—` (em dash), `–` (en dash) | `--` or `-` |
+| `→` (right arrow), `↔` (left-right arrow) | `->` or `and` |
+| `…` (horizontal ellipsis) | `...` |
+| `×` (multiplication sign) | `x` |
+| `°` (degree symbol) | drop or restructure (e.g., `88F` instead of `88°F`) |
+| `"` `"` (smart quotes), `'` `'` (smart apostrophes) | `"` `'` |
+
+This is a syntactic concern (analogous to the no-emoji rule above) and is enforced by the comment-cleanup pass during its run.
+
+Scope: applies to comments and docstrings. Does **not** apply to user-facing strings (`help_text`, `verbose_name`, error messages, log messages) — those follow their own UI / operator-copy conventions and may contain whatever characters their audience needs.
 
 ## Commenting
 

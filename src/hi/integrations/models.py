@@ -78,15 +78,12 @@ class IntegrationAttribute( AttributeModel ):
         return 'integration/attributes/'
 
     def _get_history_model_class(self):
-        """Return the history model class for IntegrationAttribute."""
         return IntegrationAttributeHistory
 
 
 class IntegrationDetailsModel( models.Model ):
-    """
-    For use in DB objects that need to be associated with an integration
-    device, sensor, controller, attribute, etc.
-    """
+    """Mixin for DB models that need integration provenance fields
+    (active key, previous-disconnected key, and arbitrary payload)."""
     objects = IntegrationDetailsModelManager()
     
     class Meta:
@@ -108,14 +105,13 @@ class IntegrationDetailsModel( models.Model ):
         blank = True,
         help_text = 'Integration-specific data (e.g., HA domain, device capabilities)',
     )
-    # The previous_integration_* fields record the integration identity
-    # an instance had at the moment it was disconnected (e.g., via
-    # sync-time preservation or Disable-SAFE). They drive the
-    # auto-reconnect path in IntegrationConnector: when an upstream
-    # entity reappears whose key matches a disconnected entity's
-    # previous identity, the entity is reconnected rather than a
-    # duplicate being created. The previous_integration_id is indexed
-    # because the secondary-match query during sync filters on it.
+    # The previous_integration_* fields record the integration identity an
+    # instance had at the moment it was disconnected. They drive the
+    # auto-reconnect path: when an upstream entity reappears whose key
+    # matches a disconnected entity's previous identity, the entity is
+    # reconnected rather than a duplicate being created. The
+    # previous_integration_id is indexed because the secondary-match query
+    # during sync filters on it.
     previous_integration_id = models.CharField(
         'Previous Integration Id',
         max_length = 32,
@@ -130,10 +126,9 @@ class IntegrationDetailsModel( models.Model ):
 
     @property
     def integration_key(self) -> IntegrationKey:
-        # Symmetric with the setter: returns None when the underlying
-        # fields are unset, so reading the property on a never-attached
-        # or already-disconnected instance is safe (and round-trips
-        # cleanly through the setter as a no-op clear).
+        # Returns None when the underlying fields are unset, so reading on a
+        # never-attached or already-disconnected instance is safe. Round-trips
+        # through the setter as a no-op clear.
         if self.integration_id is None or self.integration_name is None:
             return None
         return IntegrationKey(
@@ -149,14 +144,10 @@ class IntegrationDetailsModel( models.Model ):
             return
         self.integration_id = integration_key.integration_id
         self.integration_name = integration_key.integration_name
-        # Re-attaching to an active integration invalidates any
-        # prior detached-state record. Clearing here is defensive
-        # against future call sites that set integration_key
-        # without going through reconnect_disconnected_items: a
-        # stale previous_integration_* pair on an active entity
-        # would mis-trigger the "From X" UI badge and
-        # confuse any future query that filters disconnected
-        # entities by previous_integration_id alone.
+        # Re-attaching to an active integration invalidates any prior
+        # detached-state record. Clearing here is defensive: a stale
+        # previous_integration_* pair on an active entity would confuse
+        # queries that filter disconnected entities on previous_integration_id.
         self.previous_integration_id = None
         self.previous_integration_name = None
         return
@@ -208,8 +199,7 @@ class IntegrationDetailsModel( models.Model ):
 
 
 class IntegrationAttributeHistory(AttributeValueHistoryModel):
-    """History tracking for IntegrationAttribute changes."""
-    
+
     attribute = models.ForeignKey(
         IntegrationAttribute,
         related_name='history',
