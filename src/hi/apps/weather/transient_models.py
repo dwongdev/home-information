@@ -79,7 +79,7 @@ class DataPoint:
 
     @property
     def value_str(self):
-        # Use the default dataclass representation to avoid recursion
+        # Use the default dataclass representation to avoid recursion via __str__
         return super().__str__()
     
     @property
@@ -95,7 +95,7 @@ class DataPoint:
         return self.station.source
         
     
-T = TypeVar("T")  # Define a generic type placeholder
+T = TypeVar("T")
 
 
 @dataclass( kw_only = True )
@@ -148,12 +148,11 @@ class NumericDataPoint( DataPoint ):
                 self.quantity_max = self.quantity_ave
         elif self.quantity_min is not None and self.quantity_max is not None:
             if self.quantity_ave is None:
-                # For offset units (like Celsius), convert to absolute units for arithmetic
                 try:
                     self.quantity_ave = ( self.quantity_min + self.quantity_max ) / 2.0
                 except OffsetUnitCalculusError:
-                    # Handle offset unit arithmetic by converting to absolute units
-                    # Convert to absolute units (e.g., Celsius -> Kelvin), average, then convert back
+                    # Offset units (e.g. Celsius) cannot be averaged directly;
+                    # convert to base (Kelvin), average, then convert back.
                     min_abs = self.quantity_min.to_base_units()
                     max_abs = self.quantity_max.to_base_units() 
                     ave_abs = (min_abs + max_abs) / 2.0
@@ -193,8 +192,7 @@ class EnvironmentalData:
         for a_field in fields( self ):
             field_name = a_field.name
             datapoint = getattr( self, field_name )
-            
-            # Check if the actual value is a DataPoint instance (not the type annotation)
+
             if not isinstance( datapoint, DataPoint ):
                 continue
             if not datapoint.station:
@@ -203,15 +201,13 @@ class EnvironmentalData:
             continue
         return list( station_map.values() )
 
-    @property 
+    @property
     def data_source_counts(self) -> Dict[DataPointSource, int]:
-        """Get counts of DataPoint fields by data source."""
         source_counts = dict()
         for a_field in fields( self ):
             field_name = a_field.name
             datapoint = getattr( self, field_name )
-            
-            # Check if the actual value is a DataPoint instance (not the type annotation)
+
             if not isinstance( datapoint, DataPoint ):
                 continue
             if not datapoint.source:
@@ -224,8 +220,7 @@ class EnvironmentalData:
 
     @property
     def data_sources(self) -> Set[DataPointSource]:
-        """Get all data sources that have at least one DataPoint field."""
-        return set(self.data_source_counts.keys()) 
+        return set(self.data_source_counts.keys())
 
 
 @dataclass( kw_only = True )
@@ -314,7 +309,7 @@ class AstronomicalData( EnvironmentalData ):
     solar_noon                   : TimeDataPoint     | None = None
     moonrise                     : TimeDataPoint     | None = None
     moonset                      : TimeDataPoint     | None = None
-    moon_illumnination           : NumericDataPoint  | None = None  # Percent
+    moon_illumination            : NumericDataPoint  | None = None  # Percent
     moon_is_waxing               : BooleanDataPoint  | None = None
     civil_twilight_begin         : TimeDataPoint     | None = None
     civil_twilight_end           : TimeDataPoint     | None = None
@@ -325,10 +320,10 @@ class AstronomicalData( EnvironmentalData ):
 
     @property
     def moon_phase(self) -> MoonPhase:
-        if self.moon_illumnination is None or self.moon_is_waxing is None:
+        if self.moon_illumination is None or self.moon_is_waxing is None:
             return None
         return MoonPhase.from_illumination(
-            illumination_percent = self.moon_illumnination.quantity.magnitude,
+            illumination_percent = self.moon_illumination.quantity.magnitude,
             is_waxing = self.moon_is_waxing.value,
         )
 
@@ -338,7 +333,7 @@ class AstronomicalData( EnvironmentalData ):
             return 0
         if not self.moon_is_waxing.value:
             return round( 14.77 + self.days_until_new_moon )
-        return round( 14.77 * (( 100.0 - self.moon_illumnination.quantity.magnitude ) / 100.0 ))
+        return round( 14.77 * (( 100.0 - self.moon_illumination.quantity.magnitude ) / 100.0 ))
     
     @property
     def days_until_new_moon(self):
@@ -346,7 +341,7 @@ class AstronomicalData( EnvironmentalData ):
             return 0
         if self.moon_is_waxing.value:
             return round( 14.77 + self.days_until_full_moon )
-        return round( 14.77 * ( self.moon_illumnination.quantity.magnitude / 100.0 ))
+        return round( 14.77 * ( self.moon_illumination.quantity.magnitude / 100.0 ))
 
     
 @dataclass( kw_only = True, frozen = True )
@@ -356,7 +351,7 @@ class TimeInterval:
     name    : StringDataPoint   | None = None
 
     def __post_init__(self):
-        # Invariant is start time always less that end time.
+        # Invariant: start time always less than end time.
         assert self.start < self.end
         return
     

@@ -42,6 +42,45 @@ A useful comment in any of these categories is short, points at the non-obvious 
 
 Earning a place is the first bar; earning the current *length* is the second. Many genuinely useful comments are wordier than the substance warrants — extra qualifications, restated context, parenthetical examples that no longer pull their weight. When keeping a comment, ask whether the same substance reads cleaner in half the words. Bias toward shorter even when keeping.
 
+### WHY vs WHAT — The One-Liner Override Test
+
+When a method overrides a public contract (a base-class method, a `requires_X() -> bool`-style configuration hook), a one-line docstring is keep-worthy when it explains *why* the method returns the specific value it does — domain knowledge the signature cannot carry. Example:
+
+```python
+def requires_api_key(self) -> bool:
+    """NWS does not require an API key."""
+    return False
+```
+
+The docstring tells the reader *why* (the NWS API's actual policy), not just *what* (returns False). Without it, the reader infers the policy by absence — workable but worse than knowing.
+
+The keep applies when:
+- The override implements a public contract where the choice of return value carries domain meaning.
+- The docstring names that meaning in terms the signature cannot.
+
+The keep does **not** apply when:
+- A higher-level docstring (class, module) already establishes the WHY. For example, a `ProfileManager` class that documents its robust-loading strategy makes per-method `"""Create X with error tracking..."""` docstrings redundant — the WHY lives once at the class level.
+- The docstring restates only the WHAT (`"""Return False."""`, `"""Returns the integration's id."""`).
+- The override is mechanical, with no domain knowledge to convey.
+
+### Disambiguating Adjacent Similar Patterns
+
+When two visually similar code patterns appear in the same file but serve different purposes, comments that disambiguate which case each instance is are keep-worthy — even when each individual comment looks like a section label. Example:
+
+```python
+if entity_id not in lookup:
+    continue  # Skip comment-only entries
+
+# ... different method ...
+
+if entity_id not in lookup:
+    continue  # Skip if entity creation failed upstream
+```
+
+Both comments label an `if X not in lookup: continue` line, which alone reads as the "section labels restating well-named code" anti-pattern. But each comment names a *different reason* for the same code shape (skip-by-design vs skip-due-to-error), and that disambiguation is the load-bearing information.
+
+The keep applies when removing the comment would leave a reader uncertain which of two valid behaviors the code is implementing.
+
 ## When a Comment Does Not Belong
 
 Remove comments that fall into any of these categories. These are the patterns observed most often.
@@ -116,6 +155,10 @@ When the backend genuinely needs to mention UI behavior, describe it functionall
 
 If a cross-reference is genuinely load-bearing, prefer a stable signal: a shared constant, an explicit import, or a name match enforced by the code itself.
 
+**Carve-out: external API documentation URLs are keep-worthy.** A URL to the definitive contract documentation for an external system the code depends on (e.g., `https://api.weather.gov/openapi`, `https://open-meteo.com/en/docs`, an RFC, WMO/METAR specs) is a bookmark to the source of truth — not a maintenance liability. If the URL rots, the implementation that depends on the underlying API has a bigger problem than the comment.
+
+The distinction from the bullets above: internal code references (file paths, method names) rot when *internal* code is renamed; external API URLs rot only when the external system itself changes, which is precisely the event the URL is helping the reader trace.
+
 ### Commented-out code
 Delete it. Version control retains the history. Commented blocks create ambiguity about whether the code should be active and tend to drift out of compilability.
 
@@ -176,6 +219,23 @@ When reviewing comments on a branch or in a directory, decide per comment:
 - Is commented-out code or a vague TODO.
 - **Flatten module-vs-class docstring duplication.** When a module docstring and a class docstring in the same file repeat the same content, keep what's unique at each level. The module docstring is the right home for cross-class wire formats and inter-class contracts; the class docstring is the right home for the class's own scope and invariants.
 
+### Partial Removal — Strip and Salvage
+
+The remove-on-sight patterns in "When a Comment Does Not Belong" are shortcuts. The fuller rule for any comment that *contains* an offending element (issue number, "Phase N" prefix, "(as of yet)" hedge, caller-name parenthetical, "Mirrors X" framing, UI label outside the per-language carve-outs, etc.):
+
+1. **Strip the offending substring** — prefix, parenthetical, sentence, or fragment.
+2. **Examine the residue.** Is it load-bearing on its own? Does it state a contract, invariant, design rationale, or non-obvious WHY?
+3. **Act on what remains:**
+   - Substantive residue → **REWRITE** to a tight standalone form.
+   - Trivial residue (the offending part was carrying most of the weight) → **REMOVE** the whole comment.
+
+Examples:
+- `"Phase 5: CONFIRM IMPORT on the preview modal posts to the run view."` → strip `"Phase 5: "`, residue describes a real workflow → REWRITE (keep the workflow description).
+- `"Issue #283 sync-check probe rides on the connector."` → strip `"Issue #283 "`, residue is informational about the connector → REWRITE.
+- `"Per the discussion in #281, we removed this branch."` → strip the work-stream reference, residue (`"we removed this branch"`) is itself archeology → REMOVE the whole comment.
+
+The "if it has X, remove" shortcut is fine when the X-bearing comments are almost always entirely noise. Use the strip-and-salvage check whenever the comment shows any sign of independent substance — better to keep a substantive sentence with the work-stream prefix shaved off than to drop both.
+
 ### When Unsure — Keep and Flag
 
 Removing a *bad* comment is free. Removing a *load-bearing* comment is expensive and easy to miss in review. When in doubt:
@@ -185,11 +245,31 @@ Removing a *bad* comment is free. Removing a *load-bearing* comment is expensive
 
 A cleanup pass that errs toward keeping ambiguous comments is correct. A cleanup pass that silently deletes load-bearing context is a regression.
 
-### Authoring Boundary — Edit, Don't Author
+**Multi-rule conflict counts as uncertainty.** When a single comment hits two rules that point in opposite directions — for example, Comment-vs-Code Drift says "fix it" while a remove-on-sight pattern says "remove it" — that is, by definition, uncertainty about the right action. KEEP and FLAG. Don't pick a side silently.
 
-The cleanup pass reviews and edits *existing* comments. It does not author new ones — even when a file would clearly benefit from a comment that isn't there (a missing Context block in a template, a missing docstring on a public method, a missing invariant note next to a non-obvious guard).
+### Typo Fixes — Comments and Docstrings Only
+
+Obvious typos in comments and docstrings are fixable by the cleanup pass. Treat them like ASCII normalization: a syntactic concern applied during cleanup as a courtesy when the agent is already touching the file.
+
+In scope:
+- Misspellings (`Attrribute` → `Attribute`, `recieve` → `receive`).
+- Duplicate words (`the the`, `placement placement`, `is is`).
+- Obvious transpositions (`teh` → `the`).
+- Missing capitalization on sentence starts.
+
+Out of scope:
+- **Typos in code identifiers** (variable, method, class, attribute names) — those are renaming refactors with much broader implications. Even if a typo appears in a public class name, the cleanup pass does not rename it.
+- **Typos in user-facing strings** (HTML body text, button labels, `help_text`, error messages, log messages) — those follow the user-facing-strings hard constraint and have their own review process.
+
+If the typo's intent is ambiguous — the misspelling might be a deliberate word choice, or the apparent "typo" might be a domain-specific term — KEEP and FLAG rather than fix.
+
+### Authoring Boundary — Don't Insert Missing Comments
+
+The cleanup pass operates on *existing* comments. It does not insert comments where there are none — even when a file would clearly benefit from one (a missing Context block in a template, a missing docstring on a public method, a missing invariant note next to a non-obvious guard).
 
 Identifying these gaps is valuable but is a separate authoring task with different inputs (design intent, contract knowledge) than what the cleanup pass operates on. Surface the gap as a flagged observation if useful; do not silently fill it.
+
+**Rewriting is editing, not authoring.** When an existing comment has substance worth preserving but framing or structure that needs to change, rewriting it — including significant restructuring, stripping offending prefixes or parentheticals, reshaping a multi-paragraph block into a single sentence, or salvaging the substance and discarding everything around it — is part of normal cleanup work. The boundary is about *inserting* where there was nothing, not about how aggressively to *reshape* what was there.
 
 ### Substance-at-Wrong-Location — Stay Myopic
 
@@ -235,6 +315,10 @@ Context:
 
 **UI labels that the template itself renders are not pattern #4 violations.** The "UI element name-dropping in backend code" rule targets backend comments that quote UI labels living elsewhere — those references rot when the UI changes. A template that *renders* a button labeled `UPDATE` and refers to "UPDATE" in its top comment is a different case: the label and the comment about it live in the same file and change together. The cleanup pass can leave these in place. Backend code that references the same `UPDATE` button by name is still pattern #4 — the rule applies to cross-file references, not local self-reference.
 
+**Section labels are keep-worthy for navigation.** Templates have nominal grouping constructs (`{% block %}`, `{% if %}`, `{% for %}`, etc.) but they are not visually distinct without IDE-level Django template syntax awareness. Banner-style and short single-line section labels (`{# ----- Search form ----- #}`, `{# Cancel + Add row #}`, `{# Sticky header #}`) earn their place as navigation aids in dense templates. The bar for removing a template section label is high: only remove when the label adds *zero* information and the next block's content is completely self-explanatory.
+
+**`<!-- -->` HTML comments in templates — flag, don't convert.** Django templates should use `{# ... #}` (single-line) or `{% comment %} ... {% endcomment %}` (multi-line) for developer comments, because `<!-- -->` comments render in the browser. When the cleanup pass encounters an `<!-- -->` comment inside a Django template, it should **FLAG** the syntactic mismatch but **not convert** it. A future intentional use — for example, a comment deliberately rendered in the browser HTML as documentation for downstream consumers — would be silently broken by automatic conversion. The conversion is a coding-standards decision that requires human verification of intent.
+
 ### CSS
 
 CSS has no nesting, no module system, and no function/class structure. Section labels are the only grouping construct the language offers.
@@ -244,6 +328,20 @@ CSS has no nesting, no module system, and no function/class structure. Section l
 **UI labels in CSS comments follow the same rule as templates.** When a rule styles a button labeled `UPDATE` and the comment mentions `UPDATE`, the label and the rule live and change together. Pattern #4 does not apply within the file that *implements* the UI element.
 
 **Inline trailing comments on property values are useful and should be kept** when they explain a magic value (`min-height: 44px; /* Touch-friendly minimum */`), a behavioral choice (`flex-shrink: 0; /* Don't shrink button */`), or a browser-compat reason (`border-width: 0.5px; /* Sharper on retina */`). They are pure WHY at the most precise location.
+
+### Django Views
+
+Django view classes (`HiModalView`, `View`, `ConfigPageView` subclasses, etc.) sit at the boundary between backend logic and rendered UI. The same UI-label exception that applies to templates and CSS applies here: the view is the file that *defines* the rendering for the UI surface it owns.
+
+**UI labels that the view directly renders, dispatches on, or names in its modal/page contract are keep-worthy.** Examples that earned their place across the codebase:
+
+- Button labels rendered by the view's template: `UPDATE`, `CONNECT`, `Sync / Not now`, `Refresh and Retain` / `Refresh and Remove`.
+- Mode names dispatched by the view's POST: `DELETE`, `DELETE SAFE`, `DELETE ALL`, `SAFE` / `ALL`.
+- CTAs and modal flows the view assembles: `'Place N new items' CTA`, "the manage page", "the sync result modal".
+
+The reasoning matches templates and CSS: the label and the comment about it live in the same file (or in the view's own contract with its template) and change together. Stripping these labels in favor of generic phrasing ("preserve/hard-delete pair", "confirm/cancel actions") loses precision without gaining stability — when the button label changes, the view's logic has to change too, and the comment will surface as part of that change.
+
+Pattern #4 still applies when a backend non-view file references UI labels owned elsewhere (e.g., a manager class mentioning the "Detached" tile). The view-layer carve-out is for the view itself.
 
 ## What Is Out of Scope for the Cleanup Pass
 
