@@ -9,6 +9,24 @@ from hi.apps.sense.transient_models import SensorResponse
 from .enums import AlarmLevel, AlarmSource
 
 
+@dataclass(frozen=True)
+class AlarmSignature:
+    """Domain identity for a class of alarms that dedupe together.
+
+    Two alarms with the same signature surface as one Alert in the
+    queue. Producers construct an ``AlarmSignature`` to target alerts
+    for clearing on state recovery without having to know the alert
+    module's internal storage representation.
+    """
+
+    alarm_source : AlarmSource
+    alarm_type   : str
+    alarm_level  : AlarmLevel
+
+    def __str__(self):
+        return f'{self.alarm_source.name}.{self.alarm_type}.{self.alarm_level.name}'
+
+
 @dataclass
 class Alarm:
 
@@ -31,14 +49,16 @@ class Alarm:
     source_alarm_id      : Optional[str] = None
 
     def __post_init__(self):
-        # The lifetime field drives ``Alert.end_datetime``; zero or
+        # ``Alert.end_datetime`` is derived from this field; zero or
         # negative values produce an already-expired alert (a
-        # historical bug with the previous "0 = until acknowledged"
-        # convention) and values above MAX exceed the practical
-        # "never expires" intent. Enforce the supported range here so
-        # mistakes show up at construction, not silently as
-        # vanished alarms.
-        assert self.alarm_lifetime_secs > 0
+        # historical failure mode of the previous "0 = until
+        # acknowledged" convention). Raise rather than assert so the
+        # check survives ``python -O``.
+        if self.alarm_lifetime_secs <= 0:
+            raise ValueError(
+                f'alarm_lifetime_secs must be positive, got '
+                f'{self.alarm_lifetime_secs}'
+            )
         return
 
     @property
@@ -49,8 +69,12 @@ class Alarm:
         return AudioSignal.from_alarm_attributes( self.alarm_level, self.alarm_source, self.alarm_type )
 
     @property
-    def signature(self):
-        return f'{self.alarm_source}.{self.alarm_type}.{self.alarm_level}'
+    def signature(self) -> AlarmSignature:
+        return AlarmSignature(
+            alarm_source = self.alarm_source,
+            alarm_type   = self.alarm_type,
+            alarm_level  = self.alarm_level,
+        )
     
     def get_view_url(self) -> str:
         """

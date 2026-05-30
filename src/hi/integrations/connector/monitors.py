@@ -39,7 +39,7 @@ class IntegrationSyncCheckMonitor( PeriodicMonitor ):
 
     MONITOR_ID = 'hi.integrations.sync_check_monitor'
     INTERVAL_SECS = IntegrationSyncCheck.INTERVAL_SECS
-
+    
     def __init__( self ):
         super().__init__( id = self.MONITOR_ID )
         return
