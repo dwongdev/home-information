@@ -69,6 +69,7 @@ class ZoneMinderManager( SingletonManager, AggregateHealthProvider, ApiHealthSta
         self._zm_monitor_timestamp = datetimeproxy.min()
 
         self._change_listeners = set()
+        self._polling_interval_secs = ZmTimeouts.POLLING_INTERVAL_SECS
 
         # Add self as the API health status provider to aggregate
         self.add_api_health_status_provider(self)
@@ -140,6 +141,7 @@ class ZoneMinderManager( SingletonManager, AggregateHealthProvider, ApiHealthSta
     def _reload_implementation(self):
         try:
             self._zm_attr_type_to_attribute = self._load_attributes()
+            self._polling_interval_secs = self._read_polling_interval_secs()
             # Clear all thread-local clients since configuration changed
             self._clear_thread_local_clients()
             self.clear_caches()
@@ -198,7 +200,7 @@ class ZoneMinderManager( SingletonManager, AggregateHealthProvider, ApiHealthSta
             zm_integration = Integration.objects.get( integration_id = ZmMetaData.integration_id )
         except Integration.DoesNotExist:
             raise IntegrationError( 'ZoneMinder integration is not implemented.' )
-        
+
         if not zm_integration.is_enabled:
             raise IntegrationDisabledError( 'ZoneMinder integration is not enabled.' )
 
@@ -207,6 +209,34 @@ class ZoneMinderManager( SingletonManager, AggregateHealthProvider, ApiHealthSta
             integration_attributes=integration_attributes,
             enforce_requirements=True
         )
+
+    def _read_polling_interval_secs(self) -> int:
+        """Read the configured polling interval. Form-level validation
+        (``AttributeForm._clean_integer_value`` + the schema's
+        ``value_range`` declaration) enforces type and range at save
+        time, so any persisted value should already be a positive int
+        within bounds. The defensive fallbacks here only fire on the
+        edge cases form validation can't cover: the attribute row is
+        missing (integration enabled but never saved) or the DB was
+        manually edited / migrated from legacy data."""
+        attribute = self._zm_attr_type_to_attribute.get(
+            ZmAttributeType.POLLING_INTERVAL_SECS,
+        )
+        if attribute is None or not attribute.value:
+            return ZmTimeouts.POLLING_INTERVAL_SECS
+        try:
+            return int( attribute.value )
+        except (ValueError, TypeError):
+            logger.warning(
+                f'Malformed ZM polling interval value "{attribute.value}" '
+                f'(form validation should have caught this); falling '
+                f'back to default {ZmTimeouts.POLLING_INTERVAL_SECS}s'
+            )
+            return ZmTimeouts.POLLING_INTERVAL_SECS
+
+    @property
+    def polling_interval_secs(self) -> int:
+        return self._polling_interval_secs
         
     def create_zm_client(
             self,

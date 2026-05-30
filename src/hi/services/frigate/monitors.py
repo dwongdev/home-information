@@ -52,26 +52,33 @@ class FrigateMonitor( PeriodicMonitor, FrigateMixin, SensorResponseMixin ):
 
     MONITOR_ID = 'hi.services.frigate.monitor'
 
-    POLLING_INTERVAL_SECS = FrigateTimeouts.POLLING_INTERVAL_SECS
-    API_TIMEOUT_SECS = FrigateTimeouts.API_TIMEOUT_SECS
-
     # Force-close an open event whose age in HI's tracking set
     # exceeds this. Pulled into a class attribute so tests can shrink
     # the threshold to exercise the timeout path.
     MAX_OPEN_EVENT_AGE_SECS = FrigateTimeouts.MAX_OPEN_EVENT_AGE_SECS
 
     def __init__(self):
-        super().__init__(
-            id = self.MONITOR_ID,
-            interval_secs = self.POLLING_INTERVAL_SECS,
-        )
+        super().__init__( id = self.MONITOR_ID )
         self._poll_cursor_datetime : Optional[ datetime ] = None
         self._tracked_events : Dict[ str, TrackedFrigateEvent ] = {}
         self._was_initialized = False
         return
 
+    def get_polling_interval_secs(self) -> int:
+        # The framework calls this at sort time (before _initialize
+        # has run ``await self.frigate_manager_async()`` and cached
+        # the manager reference on this instance), and on every tick
+        # after that. Use the manager's reloaded value when the
+        # mixin's cached ``_frigate_manager`` attribute exists; fall
+        # back to the static constant before then -- avoids
+        # triggering the manager mixin's sync ``ensure_initialized``
+        # from the async event-loop thread.
+        if hasattr( self, '_frigate_manager' ):
+            return self._frigate_manager.polling_interval_secs
+        return FrigateTimeouts.POLLING_INTERVAL_SECS
+
     def get_api_timeout(self) -> float:
-        return self.API_TIMEOUT_SECS
+        return FrigateTimeouts.API_TIMEOUT_SECS
 
     def alarm_ceiling(self):
         # Frigate is a security-camera dependency; treat outages as
@@ -84,7 +91,6 @@ class FrigateMonitor( PeriodicMonitor, FrigateMixin, SensorResponseMixin ):
             provider_id = cls.MONITOR_ID,
             provider_name = 'Frigate Monitor',
             description = 'Frigate camera motion + object detection',
-            expected_heartbeat_interval_secs = cls.POLLING_INTERVAL_SECS,
         )
 
     async def _initialize(self):

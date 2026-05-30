@@ -116,22 +116,30 @@ class Alert:
     def is_matching_alarm( self, alarm : Alarm ) -> bool:
         return bool( self._first_alarm.signature == alarm.signature )
 
-    def upsert_alarm( self, alarm : Alarm ):
+    def upsert_alarm( self, alarm : Alarm ) -> bool:
+        """Absorb ``alarm`` into this alert. Returns ``True`` if the
+        alarm was appended to the occurrence deque (a distinct
+        incident under the same signature), ``False`` if it was
+        discarded as a ``source_alarm_id`` duplicate of an already-
+        tracked incident."""
         assert alarm.signature == self.first_alarm.signature
-        # Always refresh expiry from the incoming alarm. A follow-up
-        # submission with a shorter lifetime correctly shortens the
-        # Alert's end_datetime (e.g. NWS reducing its ``expires``).
-        self._end_datetime = datetimeproxy.now() + timedelta( seconds = alarm.alarm_lifetime_secs )
+        # Refresh expiry only while unacknowledged. Once acknowledged,
+        # the alert stays in the queue as a dedup anchor until its
+        # original ``end_datetime`` -- extending the window on every
+        # poll would suppress a chronic upstream condition for as long
+        # as the source keeps re-reporting it.
+        if not self._is_acknowledged:
+            self._end_datetime = datetimeproxy.now() + timedelta( seconds = alarm.alarm_lifetime_secs )
         # If the caller identified this as a specific incident and we
         # already have that incident in the deque, do not count it
-        # again — the alarm_count should reflect distinct occurrences,
+        # again -- the alarm_count should reflect distinct occurrences,
         # not how often the source re-reported the same one.
         if alarm.source_alarm_id is not None:
             for existing in self._latest_alarms:
                 if existing.source_alarm_id == alarm.source_alarm_id:
-                    return
+                    return False
         self._latest_alarms.appendleft( alarm )
-        return
+        return True
         
     def get_latest_alarm(self) -> Alarm:
         if len(self._latest_alarms) > 0:

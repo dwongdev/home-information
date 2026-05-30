@@ -79,6 +79,7 @@
   --hi-panel-tile-target-size: 280px;
   --hi-panel-tile-max-size: 360px;
   --hi-panel-tile-large-min-size: 380px;
+  --hi-panel-tile-small-min-size: 120px;
   --hi-panel-row-min-height: 56px;
   --hi-panel-row-target-height: 80px;
   --hi-panel-row-max-height: 128px;
@@ -261,6 +262,20 @@ a.clickable-card:active {
     color: var(--on-tertiary-color);
 }
 
+/* Bootstrap doesn't ship an .alert-tertiary variant, so the weather   */
+/* alerts banner falls back to no background when AlertSeverity.UNKNOWN */
+/* maps the severity to "tertiary" (real NWS alerts routinely carry    */
+/* severity = "Unknown" on advisory products like Special Weather       */
+/* Statements). Filling the gap with neutral-grey tinted-bg styling    */
+/* matching the visual rhythm of the other alert variants -- soft      */
+/* enough to signal "no specific severity" rather than the heavier     */
+/* near-black ``bg-tertiary`` treatment.                                */
+.alert-tertiary {
+    color: #383d41;
+    background-color: #e2e3e5;
+    border-color: #d6d8db;
+}
+
 .bg-danger, .btn-error, .btn-danger {
     color: var(--on-error-color) !important;
     background-color: var(--error-color) !important;
@@ -282,6 +297,36 @@ a.clickable-card:active {
 .bg-muted, .btn-muted {
     color: var(--on-muted-color) !important;
     background-color: var(--muted-color) !important;
+}
+
+/* Add-action button. Reusable treatment for "create new X"             */
+/* affordances. Dashed border + the edit-mode warm color: dashed is     */
+/* the long-standing UX convention for "this slot is awaiting           */
+/* content", and reusing the edit-mode dash color makes these buttons   */
+/* visually cluster with the dashed bar borders that mark edit-mode    */
+/* chrome. Differentiates from primary (nav), secondary (active        */
+/* state), and tertiary (settings) so an "add" stands out at a         */
+/* glance.                                                              */
+.btn-add {
+    color: var(--edit-mode-dash-color) !important;
+    /* Light translucent warm fill rather than fully transparent. The   */
+    /* edit-mode bar background is itself a warm tone, so a transparent */
+    /* dashed button would be warm-on-warm with minimal contrast. The   */
+    /* translucent chip gives the button presence as a discrete slot    */
+    /* while preserving the dashed-create vocabulary.                    */
+    background-color: rgba(169, 74, 50, 0.08) !important;
+    border: 2px dashed var(--edit-mode-dash-color) !important;
+}
+.btn-add:hover,
+.btn-add:focus,
+.btn-add:active,
+.btn-add.active {
+    color: var(--edit-mode-dash-color) !important;
+    background-color: rgba(169, 74, 50, 0.18) !important;
+    border-color: var(--edit-mode-border-color) !important;
+}
+.btn-add:focus {
+    box-shadow: 0 0 0 0.2rem rgba(169, 74, 50, 0.25) !important;
 }
 
 /* Outline Button Overrides */
@@ -402,6 +447,101 @@ a.clickable-card:active {
     max-height: 2rem;
     width: auto;
 }
+
+/* Top/bottom button bars. The right (and top-center logo) groups        */
+/* reserve their content width so the fixed app-nav controls are never   */
+/* pushed off-screen by a long list of user-defined view buttons. The    */
+/* left group takes the remaining width and scrolls horizontally on      */
+/* overflow.                                                             */
+.hi-button-bar {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+.hi-button-bar-fixed,
+.hi-button-bar-center {
+    flex: 0 0 auto;
+}
+.hi-button-bar-flex {
+    flex: 1 1 auto;
+    /* Override flexbox's default min-width:auto so this group can       */
+    /* actually shrink below its children's intrinsic widths.            */
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+.hi-button-bar-flex > * {
+    flex-shrink: 0;
+}
+
+/* Edit-mode sidebar tab strip. Three tabs (Items / View / Space) act  */
+/* as visual chrome over the existing per-template side views: each    */
+/* tab is just an antinode link to a different side-panel URL. The     */
+/* "active" class is hardcoded into the loaded template, so there's    */
+/* no client-side tab state.                                            */
+.hi-edit-sidebar-tabs {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--line-color);
+    /* Keep top-level domain switcher visible while the pane content    */
+    /* scrolls underneath. Bg matches whichever wrapper bg the sidebar  */
+    /* is showing (white in items mode, warm in detail modes) so the    */
+    /* scrolled content can't bleed through.                            */
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background-color: var(--edit-mode-primary-bg);
+}
+.hi-edit-sidebar-tab {
+    flex: 1 1 0;
+    text-align: center;
+    padding: 0.5rem 0.25rem;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    text-decoration: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1px;
+}
+.hi-edit-sidebar-tab:hover {
+    text-decoration: none;
+    background-color: rgba(23, 112, 114, 0.05);
+}
+.hi-edit-sidebar-tab.active {
+    color: var(--edit-mode-dash-color);
+    border-bottom-color: var(--edit-mode-dash-color);
+    background-color: var(--edit-mode-tertiary-bg);
+}
+.hi-edit-sidebar-tab.disabled {
+    color: #aaa;
+    pointer-events: none;
+    cursor: default;
+}
+.hi-edit-sidebar-content {
+    padding: 0.5rem;
+}
+
+/* Items-list mode: the entity rows carry status-based background      */
+/* shading (in-view / unused) and integration logos authored on        */
+/* white, so the edit-mode sidebar tint is overridden to white when    */
+/* the items list template is loaded. ``:has()`` lets the parent       */
+/* react to which child template was rendered without JS coordination, */
+/* so the white extends edge-to-edge -- no scroll edge cases.           */
+.hi-screen[hi-edit="True"] #hi-side-content:has(.entity-picker-container) {
+    background: var(--white);
+}
+
+/* Touch-target utility. Apply alongside any visual treatment           */
+/* (typically Bootstrap ``small``/``text-muted``) to give a small      */
+/* text affordance the iOS-HIG 44px tap floor without changing how    */
+/* it looks. Use anywhere a glyph-light link or icon needs to remain   */
+/* finger-friendly on a wall-mounted tablet.                            */
+.hi-tap-target {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+}
 .hi-side {
     padding-left: 0;
     padding-right: 0;
@@ -409,8 +549,6 @@ a.clickable-card:active {
 #hi-side-content {
     height: calc(100vh - var(--top-buttons-height) - var(--bottom-buttons-height));
     display: flex;
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
     flex-direction: column;
     overflow-y: auto;
 }
@@ -647,6 +785,56 @@ input[type="password"],
     color: var(--black) !important;
     background-color: #f8f8f8 !important;
 }
+
+/* Location switcher dropdown items: touch-friendly heights and a       */
+/* visible current-space marker (check icon + bold) so the user can    */
+/* see which space they're on at a glance.                              */
+.dropdown-item.plain {
+    padding: 0.6rem 1rem;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+}
+.dropdown-item.plain.active {
+    background-color: transparent;
+    color: var(--primary-color);
+    font-weight: 600;
+}
+.dropdown-item.plain.active:hover,
+.dropdown-item.plain.active:focus {
+    background-color: rgba(23, 112, 114, 0.05);
+    color: var(--primary-color);
+}
+
+/* ADD NEW SPACE: same btn-add vocabulary as other "add" affordances   */
+/* (top-bar ADD VIEW / ADD COLLECTION, entity-picker ADD NEW ITEM),    */
+/* but at a lower visual weight appropriate to its dropdown context —  */
+/* this is a secondary action accessed from a navigation menu, not a   */
+/* primary CTA. ``box-sizing: border-box`` + a horizontal margin keep  */
+/* the chip inset from the menu edges without pushing past the menu's  */
+/* right border.                                                        */
+.dropdown-item-add {
+    box-sizing: border-box;
+    width: calc(100% - 1rem);
+    margin: 0.25rem 0.5rem;
+    padding: 0.35rem 0.75rem !important;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed var(--edit-mode-dash-color);
+    border-radius: 0.25rem;
+    color: var(--edit-mode-dash-color) !important;
+    background-color: rgba(169, 74, 50, 0.06) !important;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+.dropdown-item-add:hover,
+.dropdown-item-add:focus {
+    background-color: rgba(169, 74, 50, 0.16) !important;
+    border-color: var(--edit-mode-border-color) !important;
+    color: var(--edit-mode-dash-color) !important;
+}
 .hi-custom-select .input-group-text {
     height: calc(1.5em + 0.75rem + 2px);
     line-height: 1.5;
@@ -693,6 +881,15 @@ svg .highlighted {
 
 g.hi-icon {
     pointer-events: all;
+    touch-action: manipulation;
+    /* Suppress iOS Safari's callout (Copy/Define popup) and
+       text-selection behaviors on the 750ms touch-hold the
+       long-press gesture uses. ``touch-action: manipulation``
+       governs gesture interpretation but not callouts/selection. */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
 }
 
 /* Hide background rectangles used for click targets */
@@ -1529,25 +1726,21 @@ g[hover] {
     }
 }
 
-/* Entity Picker Styles */
-.entity-picker-container {
-    /* Let the container flow naturally with sidebar scroll */
-}
-
-.entity-picker-panel {
-    background: var(--white);
-    border: 1px solid var(--line-color);
-    border-radius: 8px;
-    /* Remove fixed height - let it grow with content */
-}
+/* Entity Picker Styles. The container/panel wrappers are structural    */
+/* only (they exist for ``:has()`` detection and for template parity   */
+/* with downstream JS that may key off them). Sidebar background and   */
+/* gutters live one layer up: ``#hi-side-content`` paints the white,   */
+/* ``.hi-edit-sidebar-content`` owns the padding. Nothing here.        */
 
 .entity-picker-header {
     background: var(--muted-bg-light);
     border-bottom: 1px solid var(--line-color);
     padding: 0.5rem;
-    /* Make sticky within the sidebar scroll */
+    /* Stick below the sidebar tabs strip when scrolling. ``top`` is    */
+    /* an approximation of the tabs' rendered height; both elements'    */
+    /* z-index lets the tabs sit above this if values drift.            */
     position: sticky;
-    top: 0;
+    top: 2.5rem;
     z-index: 10;
 }
 
@@ -1589,8 +1782,8 @@ g[hover] {
 }
 
 .entity-picker-items {
-    /* Remove inner scroll - let sidebar handle scrolling */
-    padding: 0 5px 5px;
+    /* No styling -- gutter is owned by .hi-edit-sidebar-content one    */
+    /* layer up. Kept as a class hook for JS / template parity.         */
 }
 
 .entity-group-section {
@@ -1764,6 +1957,20 @@ g[hover] {
     grid-template-columns: repeat(
         auto-fit, minmax(var(--hi-panel-tile-large-min-size), 1fr)
     );
+}
+/* GRID_SMALL halves the minimum tile size so roughly twice as many
+ * columns fit in the same container. Used for collections where
+ * many simple panels (binary status, single value) benefit from a
+ * denser layout. Cards also get a halved min-height so the aspect
+ * ratio stays comparable to GRID rather than going tall-and-narrow.
+ */
+.collection-tile-grid--small {
+    grid-template-columns: repeat(
+        auto-fit, minmax(var(--hi-panel-tile-small-min-size), 1fr)
+    );
+}
+.collection-tile-grid--small .entity-card--tile {
+    min-height: var(--hi-panel-tile-small-min-size);
 }
 .collection-default {
     grid-template-columns: repeat(
@@ -1993,6 +2200,19 @@ g[hover] {
     color: var(--tertiary-color);
     margin-bottom: 0.25rem;
     line-height: 1.2;
+}
+/* Marker for fields whose value differs from the server-rendered
+   initial value. Paired with ``button[disabled]`` on the form's
+   UPDATE button to make "unsaved changes" obvious at the field
+   level as well as the action level. Set on the label by the
+   ``Hi.updateFormDirtyState`` helper via ``oninput`` on the form. */
+.sidebar-form-label.dirty::after {
+    content: " \25CF";    /* small filled circle */
+    /* Reuse the edit-mode emphasis color (dark brick red) so the
+       indicator contrasts strongly against the peach
+       ``--edit-mode-primary-bg`` panel and tracks any future
+       edit-mode palette retheme. */
+    color: var(--edit-mode-dash-color);
 }
 
 .sidebar-form-input {

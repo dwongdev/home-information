@@ -40,10 +40,7 @@ class ZoneMinderMonitor( PeriodicMonitor, ZoneMinderMixin, SensorResponseMixin )
     DEBUG_STATES_AND_MONITORS = False
     
     def __init__( self ):
-        super().__init__(
-            id = self.MONITOR_ID,
-            interval_secs = self.ZONEMINDER_POLLING_INTERVAL_SECS,
-        )
+        super().__init__( id = self.MONITOR_ID )
         self._fully_processed_event_ids = TTLCache( maxsize = 1000, ttl = 100000 )
         self._start_processed_event_ids = TTLCache( maxsize = 1000, ttl = 100000 )
         self._zm_tzname = None
@@ -51,7 +48,20 @@ class ZoneMinderMonitor( PeriodicMonitor, ZoneMinderMixin, SensorResponseMixin )
         self._poll_from_datetime = None
         self._was_initialized = False
         return
-    
+
+    def get_polling_interval_secs(self) -> int:
+        # The framework calls this at sort time (before _initialize
+        # has run ``await self.zm_manager_async()`` and cached the
+        # manager reference on this instance), and on every tick
+        # after that. Use the manager's reloaded value when the
+        # mixin's cached ``_zm_manager`` attribute exists; fall back
+        # to the static constant before then -- avoids triggering
+        # the manager mixin's sync ``ensure_initialized`` from the
+        # async event-loop thread.
+        if hasattr( self, '_zm_manager' ):
+            return self._zm_manager.polling_interval_secs
+        return self.ZONEMINDER_POLLING_INTERVAL_SECS
+
     def get_api_timeout(self) -> float:
         return self.ZONEMINDER_API_TIMEOUT_SECS
 
@@ -82,7 +92,6 @@ class ZoneMinderMonitor( PeriodicMonitor, ZoneMinderMixin, SensorResponseMixin )
             provider_id = cls.MONITOR_ID,
             provider_name = 'ZoneMinder Monitor',
             description = 'ZoneMinder camera motion detection',
-            expected_heartbeat_interval_secs = cls.ZONEMINDER_POLLING_INTERVAL_SECS,
         )
     
     def refresh( self ):

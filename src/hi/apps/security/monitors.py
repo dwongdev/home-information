@@ -20,12 +20,12 @@ class SecurityMonitor( PeriodicMonitor, SettingsMixin, SecurityMixin ):
     SECURITY_POLLING_INTERVAL_SECS = 5
 
     def __init__( self ):
-        super().__init__(
-            id = self.MONITOR_ID,
-            interval_secs = self.SECURITY_POLLING_INTERVAL_SECS,
-        )
+        super().__init__( id = self.MONITOR_ID )
         self._last_security_state_check_datetime = datetimeproxy.now()
         return
+
+    def get_polling_interval_secs(self) -> int:
+        return self.SECURITY_POLLING_INTERVAL_SECS
 
     @classmethod
     def get_provider_info(cls) -> ProviderInfo:
@@ -33,7 +33,6 @@ class SecurityMonitor( PeriodicMonitor, SettingsMixin, SecurityMixin ):
             provider_id = cls.MONITOR_ID,
             provider_name = 'Security Monitor',
             description = 'Security state monitoring',
-            expected_heartbeat_interval_secs = cls.SECURITY_POLLING_INTERVAL_SECS,
         )
 
     def alarm_ceiling(self):
@@ -73,10 +72,13 @@ class SecurityMonitor( PeriodicMonitor, SettingsMixin, SecurityMixin ):
                 logger.debug( f'Security state "{current_state}". Auto-change not allowed.' )
                 return f"Auto-change blocked ({current_state.label} mode)"
 
+            # A missing value is a legitimate state (unconfigured, blanked
+            # by the user, fresh install before initial population); skip
+            # the transition check rather than crashing the poll cycle.
             day_start_time_of_day = settings_manager.get_setting_value(
                 SecuritySetting.SECURITY_DAY_START,
             )
-            if datetimeproxy.is_time_of_day_in_interval(
+            if day_start_time_of_day and datetimeproxy.is_time_of_day_in_interval(
                     time_of_day_str = day_start_time_of_day,
                     tz_name = tz_name,
                     start_datetime = self._last_security_state_check_datetime,
@@ -90,7 +92,7 @@ class SecurityMonitor( PeriodicMonitor, SettingsMixin, SecurityMixin ):
             night_start_time_of_day = settings_manager.get_setting_value(
                 SecuritySetting.SECURITY_NIGHT_START,
             )
-            if datetimeproxy.is_time_of_day_in_interval(
+            if night_start_time_of_day and datetimeproxy.is_time_of_day_in_interval(
                     time_of_day_str = night_start_time_of_day,
                     tz_name = tz_name,
                     start_datetime = self._last_security_state_check_datetime,

@@ -663,6 +663,7 @@ function asyncUpdateDataFromJson( $target, $mode, json ) {
     //
     if ( 'html' in json ) {
      if ( $target ) {
+         beforeContentRemoval( $target );
          if ( $mode == 'replace' ) {
              $target.replaceWith( json['html'] );
          }
@@ -680,6 +681,7 @@ function asyncUpdateDataFromJson( $target, $mode, json ) {
     if ( 'replace' in json ) {
         for ( let htmlId in json['replace'] ) {
             let targetObj = $("#"+htmlId);
+            beforeContentRemoval( targetObj );
             targetObj.replaceWith( json['replace'][htmlId] ).show();
             handleNewContentAdded( targetObj );
         }
@@ -691,6 +693,7 @@ function asyncUpdateDataFromJson( $target, $mode, json ) {
     if ( 'insert' in json ) {
         for ( let htmlId in json['insert'] ) {
             let targetObj = $("#"+htmlId);
+            beforeContentRemoval( targetObj );
             targetObj.empty();
             targetObj.html( json['insert'][htmlId] ).show();
             handleNewContentAdded( targetObj );
@@ -787,9 +790,14 @@ function handleSetAttributes( attributesMap ) {
                     targetObj.attr( attrName, attrValue );
                     handleNewContentAdded( targetObj );
                 }
-            } else {
-                console.warn(`setAttributes: No elements found for selector '${selector}'`);
-            }
+            } 
+
+            // Zero-match is a legitimate outcome for callers that
+            // emit a compound selector pair (e.g., paired
+            // ``[data-status]`` / ``[data-svg-style]`` selectors
+            // where one side intentionally targets a class of
+            // element the current entity does not render).
+
         } catch (e) {
             console.error(`setAttributes: Invalid selector '${selector}': ${e.message}`);
             // Continue processing other selectors instead of failing completely

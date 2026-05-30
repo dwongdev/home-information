@@ -6,7 +6,7 @@ from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import reverse
 from django.views.generic import View
 
-from hi.apps.common.utils import is_ajax
+from hi.apps.common.utils import is_ajax, str_to_bool
 import hi.apps.common.antinode as antinode
 
 from hi.apps.attribute.view_mixins import AttributeEditViewMixin
@@ -124,11 +124,21 @@ class LocationItemStatusView( View, LocationViewMixin, EntityViewMixin ):
         raise BadRequest( f'Unknown item type "{item_type}".' )
         
     def _handle_entity(self, request : HttpRequest, entity : Entity ):
-        
+
         location_view_id = request.view_parameters.location_view_id
         location_view = LocationView.objects.get( id = location_view_id )
 
-        if location_view.location_view_type not in [ LocationViewType.AUTOMATION ]:
+        # ``long_press`` signals that the gesture-based escape hatch
+        # was used; in AUTOMATION views a tap fires one-click control,
+        # so the long-press is the only way operators have to reach
+        # status / history / edit for a controllable entity in that
+        # view. The JS doesn't dictate which view to surface -- it
+        # just reports the gesture -- and the server picks the route.
+        # ``str_to_bool`` tolerates ``1``/``true``/``yes``/``on``/etc.
+        # and returns False for a missing param.
+        long_press = str_to_bool( request.GET.get( 'long_press' ) )
+        if ( long_press
+             or location_view.location_view_type not in [ LocationViewType.AUTOMATION ] ):
             return self._entity_status_response(
                 request = request,
                 entity = entity,
@@ -149,7 +159,7 @@ class LocationItemStatusView( View, LocationViewMixin, EntityViewMixin ):
                 entity_state = controller_outcome.controller.entity_state,
                 override_value = override_sensor_value,
             )
-            return self.get_entity_svg_update_reponse( entity = entity )
+            return self.get_entity_svg_update_response( entity = entity )
 
         except OneClickNotSupported:
             return self._entity_status_response(
