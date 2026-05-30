@@ -36,6 +36,7 @@ from hi.integrations.referencer.integration_referencer import (
 from hi.constants import DIVID
 from hi.integrations.referencer.transient_models import (
     AttributeReferenceResult,
+    AttributeReferenceSearchResult,
 )
 from hi.integrations.transient_models import (
     ConnectionTestResult,
@@ -63,11 +64,12 @@ class _StubReferencer(IntegrationAttributeReferencer):
     Captures search args so tests can assert dispatch shape."""
 
     def __init__(self, integration_id='ref', label='Ref Test',
-                 results=None, raises=None):
+                 results=None, raises=None, error_message=None):
         self._integration_id = integration_id
         self._label = label
         self._results = results or []
         self._raises = raises
+        self._error_message = error_message
         self.last_query = None
         self.last_limit = None
 
@@ -88,7 +90,10 @@ class _StubReferencer(IntegrationAttributeReferencer):
         self.last_limit = limit
         if self._raises is not None:
             raise self._raises
-        return list(self._results)
+        return AttributeReferenceSearchResult(
+            results=list(self._results),
+            error_message=self._error_message,
+        )
 
 
 class _ReferencerCapableGateway(IntegrationGateway):
@@ -360,7 +365,11 @@ class TestAttributeReferenceSearchView(ViewTestBase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_search_referencer_exception_yields_empty_results(self):
+    def test_search_referencer_exception_renders_labeled_banner(self):
+        # Raised exceptions are the "referencer is broken" path; the
+        # framework catches and surfaces a banner naming the
+        # integration so the picker stays usable and the operator
+        # knows which referencer to look at.
         self.referencer._raises = RuntimeError('upstream down')
         response = self.client.post(
             self._url(),
@@ -368,9 +377,22 @@ class TestAttributeReferenceSearchView(ViewTestBase):
             **self.async_http_headers,
         )
         self.assertEqual(response.status_code, 200)
-        # Failure path renders the no-results message rather than
-        # surfacing a 5xx — the picker stays usable.
-        self.assertIn('No results', response.content.decode())
+        body = response.content.decode()
+        self.assertIn('Ref Test search failed', body)
+        self.assertNotIn('No results', body)
+
+    def test_search_referencer_error_message_renders_banner(self):
+        # Referencers that populate ``error_message`` instead of
+        # raising should also surface as a banner, not "no results".
+        self.referencer._error_message = 'Upstream auth rejected.'
+        response = self.client.post(
+            self._url(),
+            data=self._payload(query='q'),
+            **self.async_http_headers,
+        )
+        body = response.content.decode()
+        self.assertIn('Upstream auth rejected.', body)
+        self.assertNotIn('No results', body)
 
 
 # ---- attach endpoint ----------------------------------------------
