@@ -6,7 +6,8 @@ from requests import HTTPError
 
 from hi.integrations.exceptions import IntegrationAttributeError
 
-from hi.services.immich.im_referencer import ImmichAttributeReferencer
+from hi.apps.attribute.thumbnail import ThumbnailHelpers
+from hi.services.immich.im_referencer import ImmichExternalReferencer
 
 
 logging.disable(logging.CRITICAL)
@@ -51,7 +52,7 @@ class TestSearchReferencesShortCircuits(TestCase):
 
     @patch('hi.services.immich.im_referencer.build_client')
     def test_empty_query_returns_empty(self, mock_build):
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = '', limit = 20,
         )
         self.assertEqual(result.results, [])
@@ -60,7 +61,7 @@ class TestSearchReferencesShortCircuits(TestCase):
 
     @patch('hi.services.immich.im_referencer.build_client')
     def test_whitespace_query_returns_empty(self, mock_build):
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = '   ', limit = 20,
         )
         self.assertEqual(result.results, [])
@@ -75,7 +76,7 @@ class TestSearchReferences(TestCase):
         client = _make_client(_envelope(_asset('a1')))
         mock_build.return_value = client
 
-        ImmichAttributeReferencer().search_references(
+        ImmichExternalReferencer().search_references(
             query = '  dishwasher  ', limit = 10,
         )
 
@@ -92,7 +93,7 @@ class TestSearchReferences(TestCase):
         ))
         mock_build.return_value = client
 
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = 'q', limit = 20,
         )
 
@@ -118,7 +119,7 @@ class TestSearchReferences(TestCase):
         ))
         mock_build.return_value = client
 
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = 'q', limit = 20,
         )
         self.assertEqual(result.results[0].title, 'a1')
@@ -128,7 +129,7 @@ class TestSearchReferences(TestCase):
         client = _make_client(_envelope())
         mock_build.return_value = client
 
-        ImmichAttributeReferencer().search_references(query = 'q', limit = 50)
+        ImmichExternalReferencer().search_references(query = 'q', limit = 50)
         client.search_smart.assert_called_once_with(query = 'q', size = 50)
 
     @patch('hi.services.immich.im_referencer.build_client')
@@ -137,7 +138,7 @@ class TestSearchReferences(TestCase):
         # assets wrapper.
         client = _make_client({'albums': {}})
         mock_build.return_value = client
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = 'q', limit = 20,
         )
         self.assertEqual(result.results, [])
@@ -147,7 +148,7 @@ class TestSearchReferences(TestCase):
     def test_missing_items_inside_assets_yields_empty(self, mock_build):
         client = _make_client({'assets': {}, 'albums': {}})
         mock_build.return_value = client
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = 'q', limit = 20,
         )
         self.assertEqual(result.results, [])
@@ -162,7 +163,7 @@ class TestSearchReferencesErrorMessages(TestCase):
     @patch('hi.services.immich.im_referencer.build_client',
            side_effect = IntegrationAttributeError('not configured'))
     def test_unconfigured_integration(self, _mock_build):
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = 'q', limit = 20,
         )
         self.assertEqual(result.results, [])
@@ -171,7 +172,7 @@ class TestSearchReferencesErrorMessages(TestCase):
     @patch('hi.services.immich.im_referencer.build_client',
            side_effect = RuntimeError('boom in build'))
     def test_unexpected_client_build_error(self, _mock_build):
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = 'q', limit = 20,
         )
         self.assertEqual(result.results, [])
@@ -184,7 +185,7 @@ class TestSearchReferencesErrorMessages(TestCase):
         response.status_code = 401
         client.search_smart.side_effect = HTTPError('401', response = response)
         mock_build.return_value = client
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = 'q', limit = 20,
         )
         self.assertEqual(result.results, [])
@@ -197,7 +198,7 @@ class TestSearchReferencesErrorMessages(TestCase):
         response.status_code = 403
         client.search_smart.side_effect = HTTPError('403', response = response)
         mock_build.return_value = client
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = 'q', limit = 20,
         )
         self.assertIn('asset.read', result.error_message)
@@ -209,7 +210,7 @@ class TestSearchReferencesErrorMessages(TestCase):
         response.status_code = 500
         client.search_smart.side_effect = HTTPError('500', response = response)
         mock_build.return_value = client
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = 'q', limit = 20,
         )
         self.assertIn('500', result.error_message)
@@ -219,7 +220,7 @@ class TestSearchReferencesErrorMessages(TestCase):
         client = _make_client(_envelope())
         client.search_smart.side_effect = RuntimeError('boom')
         mock_build.return_value = client
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = 'q', limit = 20,
         )
         self.assertEqual(result.results, [])
@@ -233,7 +234,7 @@ class TestSearchReferencesErrorMessages(TestCase):
         # the exception escape to the framework's generic fallback.
         client = _make_client(_envelope('not-a-dict'))
         mock_build.return_value = client
-        result = ImmichAttributeReferencer().search_references(
+        result = ImmichExternalReferencer().search_references(
             query = 'q', limit = 20,
         )
         self.assertEqual(result.results, [])
@@ -247,43 +248,193 @@ class TestBuildSecondaryText(TestCase):
 
     def test_returns_none_when_no_date_no_exif(self):
         self.assertIsNone(
-            ImmichAttributeReferencer._build_secondary_text({})
+            ImmichExternalReferencer._build_secondary_text({})
         )
 
     def test_date_only(self):
-        result = ImmichAttributeReferencer._build_secondary_text({
+        result = ImmichExternalReferencer._build_secondary_text({
             'fileCreatedAt': '2025-08-14T10:32:00.000Z',
         })
         self.assertEqual(result, '2025-08-14')
 
     def test_city_and_country(self):
-        result = ImmichAttributeReferencer._build_secondary_text({
+        result = ImmichExternalReferencer._build_secondary_text({
             'exifInfo': {'city': 'Portland', 'country': 'USA'},
         })
         self.assertEqual(result, 'Portland, USA')
 
     def test_city_only(self):
-        result = ImmichAttributeReferencer._build_secondary_text({
+        result = ImmichExternalReferencer._build_secondary_text({
             'exifInfo': {'city': 'Portland'},
         })
         self.assertEqual(result, 'Portland')
 
     def test_country_only(self):
-        result = ImmichAttributeReferencer._build_secondary_text({
+        result = ImmichExternalReferencer._build_secondary_text({
             'exifInfo': {'country': 'USA'},
         })
         self.assertEqual(result, 'USA')
 
     def test_date_and_place(self):
-        result = ImmichAttributeReferencer._build_secondary_text({
+        result = ImmichExternalReferencer._build_secondary_text({
             'fileCreatedAt': '2025-08-14T10:32:00.000Z',
             'exifInfo': {'city': 'Portland', 'country': 'USA'},
         })
         self.assertEqual(result, '2025-08-14 · Portland, USA')
 
     def test_null_exif_treated_as_empty(self):
-        result = ImmichAttributeReferencer._build_secondary_text({
+        result = ImmichExternalReferencer._build_secondary_text({
             'fileCreatedAt': '2025-08-14T10:32:00.000Z',
             'exifInfo': None,
         })
         self.assertEqual(result, '2025-08-14')
+
+
+class TestAttachReferences(TestCase):
+    """Cover each branch of the defensive thumbnail chain:
+      1. upstream thumbnail succeeds
+      2. upstream thumbnail fails → original succeeds → generate succeeds
+      3. upstream thumbnail fails → original succeeds → generate fails
+      4. upstream thumbnail fails → original fails
+      5. video mime type → skip original fetch entirely
+    Plus client-build failure aborts the batch silently.
+    """
+
+    def setUp(self):
+        from hi.apps.entity.enums import EntityType
+        from hi.apps.entity.models import Entity
+        self.entity = Entity.objects.create(
+            name='Fridge', entity_type_str=str(EntityType.APPLIANCE),
+        )
+        self.referencer = ImmichExternalReferencer()
+
+    def tearDown(self):
+        from hi.integrations.models import EntityExternalReference
+        for row in EntityExternalReference.objects.filter(entity=self.entity):
+            row.delete()
+
+    def _selection(self, asset_id='uuid-1', title='Fridge plate',
+                   source_url='https://im.example.com/photos/uuid-1',
+                   mime_type='image/jpeg'):
+        from hi.integrations.referencer.transient_models import (
+            ExternalReferenceResult,
+        )
+        from hi.integrations.transient_models import IntegrationKey
+        from hi.services.immich.im_metadata import ImmichMetaData
+        return ExternalReferenceResult(
+            integration_key=IntegrationKey(
+                integration_id=ImmichMetaData.integration_id,
+                integration_name=asset_id,
+            ),
+            title=title,
+            source_url=source_url,
+            mime_type=mime_type,
+        )
+
+    @patch.object(ImmichExternalReferencer, 'build_client')
+    def test_upstream_thumbnail_success_attaches_with_upstream_bytes(
+            self, mock_build):
+        from hi.integrations.models import EntityExternalReference
+        client = Mock()
+        client.download_thumbnail.return_value = {
+            'content': b'UPSTREAM-PNG', 'mime_type': 'image/png',
+        }
+        mock_build.return_value = client
+
+        self.referencer.attach_references(self.entity, [self._selection()])
+
+        row = EntityExternalReference.objects.get(
+            entity=self.entity, integration_name='uuid-1',
+        )
+        self.assertTrue(row.thumbnail.name)
+        # Original fetch shouldn't have been attempted — upstream
+        # thumbnail succeeded.
+        client.download_original.assert_not_called()
+
+    @patch.object(ThumbnailHelpers, 'bytes_to_thumbnail_png',
+                  return_value=b'GENERATED-PNG')
+    @patch.object(ImmichExternalReferencer, 'build_client')
+    def test_thumbnail_fail_original_succeed_generate_succeed(
+            self, mock_build, mock_generate):
+        from hi.integrations.models import EntityExternalReference
+        client = Mock()
+        client.download_thumbnail.side_effect = HTTPError('500')
+        client.download_original.return_value = {
+            'content': b'JPEG-RAW', 'mime_type': 'image/jpeg',
+        }
+        mock_build.return_value = client
+
+        self.referencer.attach_references(self.entity, [self._selection()])
+
+        row = EntityExternalReference.objects.get(
+            entity=self.entity, integration_name='uuid-1',
+        )
+        self.assertTrue(row.thumbnail.name)
+        mock_generate.assert_called_once_with(b'JPEG-RAW', 'image/jpeg')
+
+    @patch.object(ThumbnailHelpers, 'bytes_to_thumbnail_png',
+                  return_value=None)
+    @patch.object(ImmichExternalReferencer, 'build_client')
+    def test_thumbnail_fail_original_succeed_generate_fail(
+            self, mock_build, _mock_generate):
+        from hi.integrations.models import EntityExternalReference
+        client = Mock()
+        client.download_thumbnail.side_effect = HTTPError('500')
+        client.download_original.return_value = {
+            'content': b'JPEG-RAW', 'mime_type': 'image/jpeg',
+        }
+        mock_build.return_value = client
+
+        self.referencer.attach_references(self.entity, [self._selection()])
+
+        row = EntityExternalReference.objects.get(
+            entity=self.entity, integration_name='uuid-1',
+        )
+        self.assertFalse(row.thumbnail)
+
+    @patch.object(ImmichExternalReferencer, 'build_client')
+    def test_thumbnail_fail_original_fail_attaches_without_thumbnail(
+            self, mock_build):
+        from hi.integrations.models import EntityExternalReference
+        client = Mock()
+        client.download_thumbnail.side_effect = HTTPError('500')
+        client.download_original.side_effect = HTTPError('502')
+        mock_build.return_value = client
+
+        self.referencer.attach_references(self.entity, [self._selection()])
+
+        row = EntityExternalReference.objects.get(
+            entity=self.entity, integration_name='uuid-1',
+        )
+        self.assertFalse(row.thumbnail)
+
+    @patch.object(ImmichExternalReferencer, 'build_client')
+    def test_video_mime_type_skips_original_fetch(self, mock_build):
+        # Downloading an entire video just to discover the generator
+        # can't make a poster is wasteful. The chain should skip
+        # original-fetch for non-image mime types.
+        from hi.integrations.models import EntityExternalReference
+        client = Mock()
+        client.download_thumbnail.side_effect = HTTPError('500')
+        mock_build.return_value = client
+
+        self.referencer.attach_references(
+            self.entity,
+            [self._selection(mime_type='video/mp4')],
+        )
+
+        row = EntityExternalReference.objects.get(
+            entity=self.entity, integration_name='uuid-1',
+        )
+        self.assertFalse(row.thumbnail)
+        client.download_original.assert_not_called()
+
+    @patch.object(ImmichExternalReferencer, 'build_client',
+                  side_effect=IntegrationAttributeError('not configured'))
+    def test_client_build_failure_aborts_silently(self, _mock_build):
+        from hi.integrations.models import EntityExternalReference
+        self.referencer.attach_references(self.entity, [self._selection()])
+        self.assertEqual(
+            EntityExternalReference.objects.filter(entity=self.entity).count(),
+            0,
+        )

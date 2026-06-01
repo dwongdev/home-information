@@ -1,7 +1,7 @@
-"""ATTRIBUTE_REFERENCE implementation for paperless-ngx.
+"""EXTERNAL_REFERENCE implementation for paperless-ngx.
 
 Translates each paperless documents-search hit into a single
-``AttributeReferenceResult``:
+``ExternalReferenceResult``:
 
   - ``title``        → document title (verbatim)
   - ``source_url``   → upstream per-document URL on the configured
@@ -30,13 +30,15 @@ from requests import HTTPError
 
 from hi.integrations.exceptions import IntegrationAttributeError
 from hi.integrations.referencer.integration_referencer import (
-    IntegrationAttributeReferencer,
+    IntegrationExternalReferencer,
 )
 from hi.integrations.referencer.transient_models import (
-    AttributeReferenceResult,
-    AttributeReferenceSearchResult,
+    ExternalReferenceResult,
+    ExternalReferenceSearchResult,
 )
+from hi.apps.attribute.thumbnail import ThumbnailHelpers
 from hi.integrations.transient_models import (
+    IntegrationKey,
     IntegrationMetaData,
     IntegrationValidationResult,
 )
@@ -50,7 +52,7 @@ from .pl_validation import validate_attributes
 logger = logging.getLogger(__name__)
 
 
-class PaperlessAttributeReferencer( IntegrationAttributeReferencer ):
+class PaperlessExternalReferencer( IntegrationExternalReferencer ):
 
     # Window cap matches the picker's snippet rendering — long
     # enough to carry useful context, short enough to keep cards
@@ -74,20 +76,20 @@ class PaperlessAttributeReferencer( IntegrationAttributeReferencer ):
             self,
             query : str,
             limit : int = 20,
-    ) -> AttributeReferenceSearchResult:
+    ) -> ExternalReferenceSearchResult:
         if not query or not query.strip():
-            return AttributeReferenceSearchResult( results = [] )
+            return ExternalReferenceSearchResult( results = [] )
         try:
             client = build_client()
         except IntegrationAttributeError as e:
             logger.warning( f'Paperless search aborted: {e}' )
-            return AttributeReferenceSearchResult(
+            return ExternalReferenceSearchResult(
                 results = [],
                 error_message = 'Paperless integration is not configured.',
             )
         except Exception as e:
             logger.exception( f'Paperless client build failed: {e}' )
-            return AttributeReferenceSearchResult(
+            return ExternalReferenceSearchResult(
                 results = [],
                 error_message = 'Paperless integration error — see server logs.',
             )
@@ -102,7 +104,7 @@ class PaperlessAttributeReferencer( IntegrationAttributeReferencer ):
                 f'Paperless search HTTP {status} for query '
                 f'{query!r}: {e}'
             )
-            return AttributeReferenceSearchResult(
+            return ExternalReferenceSearchResult(
                 results = [],
                 error_message = self._http_error_message( status ),
             )
@@ -110,17 +112,82 @@ class PaperlessAttributeReferencer( IntegrationAttributeReferencer ):
             logger.warning(
                 f'Paperless search failed for query {query!r}: {e}'
             )
-            return AttributeReferenceSearchResult(
+            return ExternalReferenceSearchResult(
                 results = [],
                 error_message = 'Paperless search failed — see server logs.',
             )
 
         documents = envelope.get( PaperlessApi.RESPONSE_RESULTS, [] ) or []
-        return AttributeReferenceSearchResult(
+        return ExternalReferenceSearchResult(
             results = [
                 self._translate( client = client, document = doc, query = query )
                 for doc in documents
             ],
+        )
+
+    # The module-level client factory satisfies the base's
+    # ``build_client`` interface directly -- no wrapper method.
+    build_client = staticmethod( build_client )
+
+    @staticmethod
+    def _try_upstream_thumbnail(
+            client : PaperlessClient,
+            integration_name : str,
+    ) -> Optional[bytes]:
+        """Fetch upstream thumbnail bytes; return None on any
+        failure. Paperless document ids are integers on the wire but
+        are carried as strings through the IntegrationKey."""
+        try:
+            document_id = int( integration_name )
+        except (TypeError, ValueError):
+            return None
+        try:
+            downloaded = client.download_thumbnail( document_id = document_id )
+        except Exception as e:
+            # Broad catch: this is a best-effort thumbnail fetch.
+            # Any failure here (HTTP, network, code bug) should mean
+            # "no thumbnail", never "the whole attach failed".
+            logger.warning(
+                f'Paperless thumbnail unavailable for document '
+                f'{integration_name}: {e}'
+            )
+            return None
+        return downloaded.get( 'content' )
+
+    @staticmethod
+    def _try_generate_from_original(
+            client : PaperlessClient,
+            integration_name : str,
+            mime_type : str,
+    ) -> Optional[bytes]:
+        """Pull the original document bytes and ask the framework
+        generator for a thumbnail. Gated on mime type to skip
+        formats the generator can't handle (office docs, text)
+        rather than waste bandwidth on bytes the generator will
+        reject."""
+        if mime_type not in ThumbnailHelpers.THUMBNAIL_SUPPORTED_MIME_TYPES:
+            return None
+        try:
+            document_id = int( integration_name )
+        except (TypeError, ValueError):
+            return None
+        try:
+            downloaded = client.download_original( document_id = document_id )
+        except Exception as e:
+            # Broad catch: same rationale as ``_try_upstream_thumbnail``
+            # -- the original-bytes fallback is best-effort; any
+            # failure here means "no thumbnail", never per-selection
+            # attach failure.
+            logger.warning(
+                f'Paperless original-bytes fetch failed for document '
+                f'{integration_name}: {e}'
+            )
+            return None
+        original_bytes = downloaded.get( 'content' )
+        if not original_bytes:
+            return None
+        return ThumbnailHelpers.bytes_to_thumbnail_png(
+            original_bytes, mime_type,
         )
 
     @staticmethod
@@ -137,12 +204,16 @@ class PaperlessAttributeReferencer( IntegrationAttributeReferencer ):
             client   : PaperlessClient,
             document : dict,
             query    : str,
-    ) -> AttributeReferenceResult:
+    ) -> ExternalReferenceResult:
         document_id = document.get( PaperlessApi.DOC_ID )
         title = document.get( PaperlessApi.DOC_TITLE ) or ''
         content = document.get( PaperlessApi.DOC_CONTENT ) or ''
         mime_type = document.get( PaperlessApi.DOC_MIME_TYPE )
-        return AttributeReferenceResult(
+        return ExternalReferenceResult(
+            integration_key = IntegrationKey(
+                integration_id   = PaperlessMetaData.integration_id,
+                integration_name = str( document_id ),
+            ),
             title = title,
             source_url = client.build_document_details_url( document_id ),
             thumbnail_url = self._proxy_thumbnail_url( document_id ),

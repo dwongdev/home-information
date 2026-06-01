@@ -1,7 +1,11 @@
 """
 Framework-level integration views shared across capabilities.
 """
+import logging
+
 from django.core.exceptions import BadRequest
+from django.db import transaction
+from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import View
@@ -9,6 +13,7 @@ from django.views.generic import View
 from hi.apps.attribute.view_mixins import AttributeEditViewMixin
 from hi.apps.entity.entity_placement import EntityPlacementService
 from hi.apps.location.models import LocationView
+from hi.constants import DIVID
 from hi.enums import ViewMode, ViewType
 from hi.hi_async_view import HiModalView
 from hi.views import page_not_found_response
@@ -23,9 +28,111 @@ from hi.integrations.models import IntegrationAttribute
 from hi.integrations.placement_request import PlacementFormParser, PlacementUrlParams
 from hi.integrations.view_mixins import (
     CapabilityBlockViewMixin,
+    ExternalReferenceCardViewMixin,
     IntegrationPlacementViewMixin,
     IntegrationViewMixin,
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+class ExternalReferenceRenameView( View, ExternalReferenceCardViewMixin ):
+    """POST endpoint: rename a single external-reference card. The
+    title is operator-controlled and persists across upserts on
+    re-attach."""
+
+    def post( self, request, owner_type, reference_id, *args, **kwargs ):
+        reference = self.get_external_reference_or_404(
+            owner_type = owner_type, reference_id = reference_id,
+        )
+        new_title = ( request.POST.get(
+            DIVID['EXT_REF_TITLE_FIELD']
+        ) or '' ).strip()
+        if not new_title:
+            raise BadRequest( 'Title must be non-empty.' )
+        reference.title = new_title[:255]
+        reference.save( update_fields = [ 'title', 'updated_datetime' ] )
+        return self.render_grid_replace(
+            request, owner_type, getattr( reference, owner_type ),
+        )
+
+
+class ExternalReferenceDeleteView( View, ExternalReferenceCardViewMixin ):
+    """POST endpoint: unlink (delete) a single external-reference
+    card. Best-effort thumbnail-file cleanup is the model's
+    responsibility."""
+
+    def post( self, request, owner_type, reference_id, *args, **kwargs ):
+        reference = self.get_external_reference_or_404(
+            owner_type = owner_type, reference_id = reference_id,
+        )
+        # Capture the owner before delete; the row's FK accessor is
+        # unreliable after delete().
+        owner = getattr( reference, owner_type )
+        reference.delete()
+        return self.render_grid_replace( request, owner_type, owner )
+
+
+class ExternalReferenceReorderView( View, ExternalReferenceCardViewMixin ):
+    """POST endpoint: move a single external-reference card one slot
+    left or right. Re-normalizes order_ids of the affected siblings
+    so the new ordering survives subsequent reorders without
+    accumulating gaps."""
+
+    def post( self, request, owner_type, reference_id, *args, **kwargs ):
+        direction = request.POST.get( DIVID['EXT_REF_DIRECTION_FIELD'] )
+        if direction not in (
+                DIVID['EXT_REF_DIRECTION_LEFT'],
+                DIVID['EXT_REF_DIRECTION_RIGHT'],
+        ):
+            raise BadRequest( 'Invalid direction.' )
+
+        reference = self.get_external_reference_or_404(
+            owner_type = owner_type, reference_id = reference_id,
+        )
+        model = self.EXTERNAL_REFERENCE_MODELS[ owner_type ]
+        owner = getattr( reference, owner_type )
+
+        # The read + renumber + writes run inside one transaction
+        # with row locks on the sibling set so concurrent reorders
+        # serialize. Without this, two simultaneous POSTs each see
+        # a stale ordering and the second writer clobbers the
+        # first, occasionally leaving duplicate ``order_id`` values
+        # the ordering meta can't disambiguate.
+        with transaction.atomic():
+            siblings = list(
+                model.objects.select_for_update().filter(
+                    **{ owner_type: owner },
+                ).order_by( 'order_id', '-created_datetime' )
+            )
+            try:
+                current_idx = next(
+                    i for i, r in enumerate(siblings) if r.pk == reference.pk
+                )
+            except StopIteration:
+                raise Http404
+
+            if direction == DIVID['EXT_REF_DIRECTION_LEFT'] and current_idx > 0:
+                siblings[current_idx], siblings[current_idx - 1] = (
+                    siblings[current_idx - 1], siblings[current_idx],
+                )
+            elif (
+                    direction == DIVID['EXT_REF_DIRECTION_RIGHT']
+                    and current_idx < len(siblings) - 1
+            ):
+                siblings[current_idx], siblings[current_idx + 1] = (
+                    siblings[current_idx + 1], siblings[current_idx],
+                )
+            # Re-normalize order_ids based on the new ordering. Rows
+            # whose position didn't change get no DB write (cheap +
+            # avoids unnecessary updated_datetime bumps).
+            for new_index, sibling in enumerate(siblings):
+                if sibling.order_id != new_index:
+                    sibling.order_id = new_index
+                    sibling.save( update_fields = [ 'order_id', 'updated_datetime' ] )
+
+        return self.render_grid_replace( request, owner_type, owner )
 
 
 class CapabilityConfigureView( HiModalView,

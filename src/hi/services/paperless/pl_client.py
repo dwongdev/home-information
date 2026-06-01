@@ -1,9 +1,9 @@
-"""HTTP client for the paperless-ngx ATTRIBUTE_REFERENCE integration.
+"""HTTP client for the paperless-ngx EXTERNAL_REFERENCE integration.
 
 The client is intentionally small: a single thin wrapper over
 ``requests.Session`` plus a factory that constructs one from the
 stored ``Integration`` attributes. There is no manager singleton —
-ATTRIBUTE_REFERENCE has no monitors and no cached state to own, so
+EXTERNAL_REFERENCE has no monitors and no cached state to own, so
 each call builds a fresh client from current DB state.
 
 The browser-facing thumbnail URL is built by the *referencer*, not
@@ -81,6 +81,23 @@ class PaperlessClient:
         ``{'content': bytes, 'mime_type': str}`` — the shape the
         proxy view streams back to the browser."""
         path = PaperlessApi.DOCUMENT_THUMB_PATH.format( id = document_id )
+        url = urljoin( self.api_url, path )
+        response = self._session.get( url, timeout = self._timeout_secs )
+        response.raise_for_status()
+        return {
+            'content': response.content,
+            'mime_type': response.headers.get(
+                'Content-Type', 'application/octet-stream',
+            ),
+        }
+
+    def download_original( self, document_id : int ) -> Dict[str, Any]:
+        """Fetch the per-document original bytes from
+        ``/api/documents/<id>/download/``. Returns
+        ``{'content': bytes, 'mime_type': str}``. Callers should
+        gate this on the mime type to skip formats the framework's
+        thumbnail generator can't handle."""
+        path = PaperlessApi.DOCUMENT_DOWNLOAD_PATH.format( id = document_id )
         url = urljoin( self.api_url, path )
         response = self._session.get( url, timeout = self._timeout_secs )
         response.raise_for_status()

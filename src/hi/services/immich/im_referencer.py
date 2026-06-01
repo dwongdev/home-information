@@ -6,13 +6,15 @@ from requests import HTTPError
 
 from hi.integrations.exceptions import IntegrationAttributeError
 from hi.integrations.referencer.integration_referencer import (
-    IntegrationAttributeReferencer,
+    IntegrationExternalReferencer,
 )
 from hi.integrations.referencer.transient_models import (
-    AttributeReferenceResult,
-    AttributeReferenceSearchResult,
+    ExternalReferenceResult,
+    ExternalReferenceSearchResult,
 )
+from hi.apps.attribute.thumbnail import ThumbnailHelpers
 from hi.integrations.transient_models import (
+    IntegrationKey,
     IntegrationMetaData,
     IntegrationValidationResult,
 )
@@ -26,7 +28,7 @@ from .im_validation import validate_attributes
 logger = logging.getLogger(__name__)
 
 
-class ImmichAttributeReferencer( IntegrationAttributeReferencer ):
+class ImmichExternalReferencer( IntegrationExternalReferencer ):
 
     def get_metadata( self ) -> IntegrationMetaData:
         return ImmichMetaData
@@ -41,20 +43,20 @@ class ImmichAttributeReferencer( IntegrationAttributeReferencer ):
             self,
             query : str,
             limit : int = 20,
-    ) -> AttributeReferenceSearchResult:
+    ) -> ExternalReferenceSearchResult:
         if not query or not query.strip():
-            return AttributeReferenceSearchResult( results = [] )
+            return ExternalReferenceSearchResult( results = [] )
         try:
             client = build_client()
         except IntegrationAttributeError as e:
             logger.warning( f'Immich search aborted: {e}' )
-            return AttributeReferenceSearchResult(
+            return ExternalReferenceSearchResult(
                 results = [],
                 error_message = 'Immich integration is not configured.',
             )
         except Exception as e:
             logger.exception( f'Immich client build failed: {e}' )
-            return AttributeReferenceSearchResult(
+            return ExternalReferenceSearchResult(
                 results = [],
                 error_message = 'Immich integration error — see server logs.',
             )
@@ -69,7 +71,7 @@ class ImmichAttributeReferencer( IntegrationAttributeReferencer ):
                 f'Immich search HTTP {status} for query '
                 f'{query!r}: {e}'
             )
-            return AttributeReferenceSearchResult(
+            return ExternalReferenceSearchResult(
                 results = [],
                 error_message = self._http_error_message( status ),
             )
@@ -77,7 +79,7 @@ class ImmichAttributeReferencer( IntegrationAttributeReferencer ):
             logger.warning(
                 f'Immich search failed for query {query!r}: {e}'
             )
-            return AttributeReferenceSearchResult(
+            return ExternalReferenceSearchResult(
                 results = [],
                 error_message = 'Immich search failed — see server logs.',
             )
@@ -101,11 +103,63 @@ class ImmichAttributeReferencer( IntegrationAttributeReferencer ):
                 f'Immich asset translation failed for query '
                 f'{query!r}: {e}'
             )
-            return AttributeReferenceSearchResult(
+            return ExternalReferenceSearchResult(
                 results = [],
                 error_message = self._http_error_message( None ),
             )
-        return AttributeReferenceSearchResult( results = results )
+        return ExternalReferenceSearchResult( results = results )
+
+    # The module-level client factory satisfies the base's
+    # ``build_client`` interface directly -- no wrapper method.
+    build_client = staticmethod( build_client )
+
+    @staticmethod
+    def _try_upstream_thumbnail(
+            client : ImmichClient, integration_name : str,
+    ) -> Optional[bytes]:
+        try:
+            downloaded = client.download_thumbnail( asset_id = integration_name )
+        except Exception as e:
+            # Broad catch: this is a best-effort thumbnail fetch.
+            # Any failure here (HTTP, network, code bug) should mean
+            # "no thumbnail", never "the whole attach failed".
+            logger.warning(
+                f'Immich thumbnail unavailable for asset '
+                f'{integration_name}: {e}'
+            )
+            return None
+        return downloaded.get( 'content' )
+
+    @staticmethod
+    def _try_generate_from_original(
+            client : ImmichClient,
+            integration_name : str,
+            mime_type : str,
+    ) -> Optional[bytes]:
+        """Pull the original bytes and ask the framework generator
+        for a thumbnail. Gated on mime type to avoid downloading
+        videos just to discover the generator can't make a poster
+        for them."""
+        if mime_type not in ThumbnailHelpers.THUMBNAIL_IMAGE_MIME_TYPES:
+            return None
+        try:
+            downloaded = client.download_original( asset_id = integration_name )
+        except Exception as e:
+            # Broad catch: same rationale as ``_try_upstream_thumbnail``
+            # -- the original-bytes fallback is best-effort; any
+            # failure here means "no thumbnail", never per-selection
+            # attach failure.
+            logger.warning(
+                f'Immich original-bytes fetch failed for asset '
+                f'{integration_name}: {e}'
+            )
+            return None
+        original_bytes = downloaded.get( 'content' )
+        if not original_bytes:
+            return None
+        return ThumbnailHelpers.bytes_to_thumbnail_png(
+            original_bytes, mime_type,
+        )
 
     @staticmethod
     def _http_error_message( status : Optional[int] ) -> str:
@@ -122,14 +176,18 @@ class ImmichAttributeReferencer( IntegrationAttributeReferencer ):
             self,
             client : ImmichClient,
             asset  : dict,
-    ) -> AttributeReferenceResult:
+    ) -> ExternalReferenceResult:
         asset_id = asset.get( ImmichApi.ASSET_ID )
         title = (
             asset.get( ImmichApi.ASSET_ORIGINAL_FILE_NAME )
             or asset_id
             or ''
         )
-        return AttributeReferenceResult(
+        return ExternalReferenceResult(
+            integration_key = IntegrationKey(
+                integration_id   = ImmichMetaData.integration_id,
+                integration_name = asset_id or '',
+            ),
             title = title,
             source_url = client.build_asset_web_url( asset_id ),
             thumbnail_url = self._proxy_thumbnail_url( asset_id ),

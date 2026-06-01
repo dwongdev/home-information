@@ -103,6 +103,10 @@
         showAddAttribute: function(containerSelector = null) {
             return _showAddAttribute(containerSelector);
         },
+
+        showAddFile: function(button, fileInputId) {
+            return _showAddFile(button, fileInputId);
+        },
         
         toggleSecretField: function(button) {
             return _toggleSecretField(button);
@@ -359,6 +363,13 @@
             
             // Process DOM updates first (works for both success and error)
             const lastAppendTarget = this.processDOMUpdates(data, options);
+
+            // After the swap, restore the operator's active tab so
+            // that an UPDATE round-trip doesn't drop them back to
+            // the server's data-derived default.
+            if (window.Hi.attr.restoreActiveTabs) {
+                window.Hi.attr.restoreActiveTabs();
+            }
             
             // Handle scroll-to-new-content if requested by caller
             if (options.scrollToNewContent && lastAppendTarget) {
@@ -779,16 +790,41 @@
         });
     }
 
+    // The Add Info / Add File buttons live in the sticky panel above
+    // the tabs and target content that lives inside Tab 1. When the
+    // operator triggers them from an inactive tab, reveal Tab 1
+    // first so the newly exposed form/picker is actually visible.
+    // Tab 1 is located by the framework's id convention
+    // ("hi-attr-tab1-<owner_id>"), which the attribute framework
+    // owns end-to-end.
+    function _ensureAttributeTabActive(elementInForm) {
+        const $form = elementInForm
+            ? $(elementInForm).closest('form')
+            : $();
+        const $scope = $form.length > 0 ? $form : $(document);
+        const $pane = $scope.find('[id^="hi-attr-tab1-"]').first();
+        if ($pane.length === 0) return;
+        const paneId = $pane.attr('id');
+        const $nav = $scope.find(
+            'a[data-toggle="tab"][href="#' + paneId + '"]'
+        );
+        if ($nav.length > 0 && !$nav.hasClass('active')) {
+            $nav.tab('show');
+        }
+    }
+
     // Simple add attribute - just show the last (empty) formset form
     function _showAddAttribute(containerSelector = null) {
         // Find the last attribute card (should be the empty extra form)
         const scope = containerSelector ? $(containerSelector) : $(document);
         const attributeCards = scope.find(Hi.ATTR_V2_ATTRIBUTE_CARD_SELECTOR);
-        
+
         if (attributeCards.length > 0) {
             const lastCard = attributeCards[attributeCards.length - 1];
             const $lastCard = $(lastCard);
-            
+
+            _ensureAttributeTabActive(lastCard);
+
             // Show the card if hidden
             $lastCard.show();
             
@@ -809,7 +845,13 @@
             lastCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     };
-    
+
+    function _showAddFile(button, fileInputId) {
+        _ensureAttributeTabActive(button);
+        const input = document.getElementById(fileInputId);
+        if (input) input.click();
+    }
+
     // Removed dedicated add attribute form functions - using Django formset approach only
     
     
@@ -1440,26 +1482,47 @@
 
         if (!parent) return;
 
+        let other = null;
         switch (direction) {
             case "up":
-                const prev = card.previousElementSibling;
-                if (prev) parent.insertBefore(card, prev);
+                other = card.previousElementSibling;
+                if (other) parent.insertBefore(card, other);
                 break;
 
             case "down":
-                const next = card.nextElementSibling;
-                if (next) parent.insertBefore(next, card);
+                other = card.nextElementSibling;
+                if (other) parent.insertBefore(other, card);
                 break;
 
             default:
                 console.error(`Invalid direction: ${direction}`);
                 return;
         }
+        if (!other) return;  // already at boundary; nothing to persist.
+
+        // File cards don't ride the regular formset, so the global
+        // renumber path doesn't reach them. Renumber just the file
+        // section in DOM order via the ad-hoc hidden inputs. A pure
+        // swap is wrong here -- files default to order_id=0 on
+        // upload, so two equal values would no-op the swap and the
+        // ordering never differentiates. Renumbering 0..N-1 inside
+        // the file grid bootstraps from the all-zero state and
+        // stays correct through subsequent reorders without
+        // touching any non-file attribute's order_id.
+        // Regular attribute cards: keep the existing renumber path
+        // -- their formset save handles per-row order_id and the
+        // UI partitions display by type, so the renumber's numeric
+        // overlap with file order_ids is benign.
+        const isFileCard = $(card).is(Hi.ATTR_V2_FILE_CARD_SELECTOR);
+        if (isFileCard) {
+            _renumberFileCardOrderIds(parent);
+        }
 
         const $container = $(card).closest(Hi.ATTR_V2_CONTAINER_SELECTOR);
         if ($container.length > 0) {
-            _updateOrderIndexes($container);
-
+            if (!isFileCard) {
+                _updateOrderIndexes($container);
+            }
             if (window.Hi.attr.dirtyTracking) {
                 const containerId = $container.attr('id');
                 if (containerId) {
@@ -1470,6 +1533,23 @@
                 }
             }
         }
+    }
+
+    function _renumberFileCardOrderIds(fileGridParent) {
+        // Walk file-card siblings in DOM order and write 0..N-1 to
+        // each card's ``file_order_id_*`` hidden input. Server
+        // processes the changes via ``process_file_order_updates``.
+        const $cards = $(fileGridParent).find(
+            Hi.ATTR_V2_FILE_CARD_SELECTOR
+        );
+        $cards.each(function(index) {
+            const $input = $(this).find(
+                'input[type="hidden"][name^="file_order_id_"]'
+            ).first();
+            if ($input.length) {
+                $input.val(String(index));
+            }
+        });
     }
 
     function _restoreDefaultValue(attributeId, containerSelector = null) {
@@ -1589,7 +1669,12 @@
 
     function _updateOrderIndexes($container) {
         let order = 1;
-        
+
+        // Regular attribute cards only. File cards are intentionally
+        // excluded -- file ordering uses a scoped renumber over the
+        // file grid alone (``_renumberFileCardOrderIds``) so it
+        // can't clobber non-file order_ids when files share the
+        // order_id namespace with hundreds of regular attributes.
         const $cards = $container.find(Hi.ATTR_V2_ATTRIBUTE_CARD_SELECTOR);
 
         $cards.each(function() {
@@ -1612,5 +1697,41 @@
             order += 1;
         });
     }
-    
+
+    // Persist the operator's active-tab choice across async form
+    // submissions. The form element survives the response swap
+    // (it wraps the replaced content body), so its data attribute
+    // is a stable carrier for the active tab's href. Generic: no
+    // knowledge of how many tabs exist or what they mean.
+    //
+    // Stash on tab change.
+    $(document).on(
+        'shown.bs.tab',
+        'a[data-toggle="tab"]',
+        function() {
+            const $form = $(this).closest('form');
+            if ($form.length === 0) return;
+            $form.attr('data-active-tab', $(this).attr('href'));
+        }
+    );
+
+    // Exposed on Hi.attr so the response handler can invoke it
+    // after swapping fresh content into the form, without reaching
+    // into module internals.
+    function _restoreActiveTabs() {
+        $('form[data-active-tab]').each(function() {
+            const $form = $(this);
+            const targetHref = $form.attr('data-active-tab');
+            if (!targetHref) return;
+            const $tab = $form.find(
+                'a[data-toggle="tab"][href="' + targetHref + '"]'
+            );
+            if ($tab.length === 0) return;
+            if (!$tab.hasClass('active')) {
+                $tab.tab('show');
+            }
+        });
+    }
+    window.Hi.attr.restoreActiveTabs = _restoreActiveTabs;
+
 })();

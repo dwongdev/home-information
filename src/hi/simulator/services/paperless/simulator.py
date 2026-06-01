@@ -2,7 +2,7 @@
 
 Unlike the entity-shaped simulators (HASS, HomeBox, ZoneMinder),
 paperless-ngx has no 1-to-1 mapping onto HI Entities — its
-contribution is the ATTRIBUTE_REFERENCE capability, which produces
+contribution is the EXTERNAL_REFERENCE capability, which produces
 TEXT attributes on existing Entity / Location records, not new
 entities. So this simulator has no SimEntities and no persistent
 corpus. Instead it generates synthetic search results on the fly,
@@ -14,15 +14,22 @@ singleton:
                      rendering paths)
   - mime_mix       : which mime-type mix populates result rows (PDF
                      only, images only, plain text only, or mixed)
-  - thumbnails     : whether the simulator's
-                     ``/api/documents/<id>/thumb/`` endpoint serves
-                     a thumbnail (when off, the endpoint 404s and
-                     the picker falls back to its icon)
+  - thumbnails     : whether ``/api/documents/<id>/thumb/`` serves
+                     a thumbnail (when off the endpoint 404s and HI
+                     falls back to the ``/api/documents/<id>/download/``
+                     original-bytes -> pdf2image -> thumbnail
+                     pipeline -- which produces a HI-generated
+                     thumbnail visually distinguishable from the
+                     upstream placeholder). To exercise the full
+                     no-thumbnail path (mime fallback icon on the
+                     card), force a ``ServiceFaultMode.SERVER_ERROR``
+                     so all endpoints fail.
   - snippets       : whether each result carries a content snippet
                      (exercises picker layout with / without it)
-  - latency_ms     : artificial latency on the documents-list
-                     endpoint, for surfacing any debounce or
-                     loading-state issues in the picker
+
+Artificial latency is intentionally NOT a knob here -- the
+framework ``ServiceFaultMode`` already exposes a ``SLOW`` mode that
+covers the same operator need without per-simulator duplication.
 
 Settings live in memory on the singleton (same lifecycle as
 HomeBox's ``_api_version``) — lost on server restart, survives
@@ -70,7 +77,6 @@ class PaperlessSimSettings:
     mime_mix     : MimeMix = MimeMix.MIXED
     thumbnails   : bool    = True
     snippets     : bool    = True
-    latency_ms   : int     = 0
 
 
 class PaperlessSimulator( ServiceSimulator ):
@@ -108,7 +114,7 @@ class PaperlessSimulator( ServiceSimulator ):
 
     @property
     def sim_entity_definition_list(self) -> List[ SimEntityDefinition ]:
-        # Paperless contributes only via ATTRIBUTE_REFERENCE — no
+        # Paperless contributes only via EXTERNAL_REFERENCE — no
         # SimEntity rows ever, so the service page's entity-list
         # area renders empty. The extras pane carries the operator
         # UI.

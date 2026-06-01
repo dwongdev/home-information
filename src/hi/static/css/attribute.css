@@ -150,6 +150,37 @@
     margin-bottom: 2rem;
 }
 
+/* Collapse the file section when it has no cards. The wrapper
+   stays in the DOM (file_grid_html_id is the target for "Add
+   File" insertions) but takes zero vertical space. */
+.attr-v2-file-section:not(:has(.attr-v2-file-card)) {
+    margin-bottom: 0;
+}
+.attr-v2-file-section:not(:has(.attr-v2-file-card)) .attr-v2-file-grid {
+    margin-top: 0;
+}
+
+/* External-reference card: integration logo inside the open-link
+   action button. Sized 24px so it reads as an icon at typical
+   button height. */
+.hi-ext-ref-integration-logo {
+    width: 24px;
+    height: 24px;
+    vertical-align: middle;
+}
+
+/* Action buttons in any file-card actions row (native attribute
+   file cards and the external-reference card both use
+   ``attr-v2-file-actions``). inline-flex centers tall children
+   (24px icons / integration logos) inside btn-sm's padded box;
+   without this an img > line-height defaults to baseline-ish
+   vertical alignment and visually sits high in the button. */
+.attr-v2-file-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .attr-v2-file-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -393,6 +424,22 @@
     border-radius: 0.25rem;
 }
 
+/* Hide the "previous" reorder chevron on the first card and the
+   "next" chevron on the last card. ``visibility: hidden`` (not
+   ``display: none``) preserves the grid slot so the action row's
+   ``mr-auto`` / ``ml-auto`` spacing for the middle cluster stays
+   consistent across first / middle / last cards. The DOM-swap
+   reorder path (``insertBefore``) retriggers ``:first-child`` /
+   ``:last-child`` automatically -- no JS state to maintain. */
+.attr-v2-file-grid > .attr-v2-file-card:first-child [data-reorder-action="left"],
+.attr-v2-file-grid > .hi-ext-ref-card:first-child .hi-ext-ref-reorder-left {
+    visibility: hidden;
+}
+.attr-v2-file-grid > .attr-v2-file-card:last-child [data-reorder-action="right"],
+.attr-v2-file-grid > .hi-ext-ref-card:last-child .hi-ext-ref-reorder-right {
+    visibility: hidden;
+}
+
 /* Reorder Controls - Overlay in upper right of thumbnail */
 .attr-v2-reorder-controls {
     position: absolute;
@@ -469,6 +516,16 @@
 /* Attribute List Layout */
 .attr-v2-attribute-section {
     margin-bottom: 2rem;
+}
+
+/* Collapse the attribute section when no saved-instance cards are
+   present (only Django formset extras would render an
+   ``attr-v2-new-attribute`` card; that card stays hidden until
+   "Add Info" reveals it). The wrapper stays in the DOM so the
+   formset's management form remains intact and "Add Info"'s
+   reveal still finds its target. */
+.attr-v2-attribute-section:not(:has(.attr-v2-attribute-card:not(.attr-v2-new-attribute))) {
+    margin-bottom: 0;
 }
 
 .attr-v2-attribute-list {
@@ -1777,7 +1834,7 @@
    anchored. Pin the search controls to the top edge of the body so the
    operator can refine their query at any scroll position without
    scrolling back up to find the search row. */
-.hi-attr-picker-search-form {
+.hi-ref-picker-search-form {
     position: sticky;
     top: 0;
     z-index: 1;
@@ -1790,7 +1847,7 @@
    against the title -- otherwise modal-body's default padding-top shows
    scrolling content through the gap above the sticky element. The
    search form supplies its own padding-top for breathing room. */
-.hi-attr-picker .modal-body {
+.hi-ref-picker .modal-body {
     padding-top: 0;
 }
 
@@ -1800,27 +1857,70 @@
    that does nothing useful. The button face shows the source's
    logo on a light background; native logos meant for white render
    correctly here. */
-.hi-attr-picker-source-banner {
+.hi-ref-picker-source-banner {
     background-color: #fff;
     border: 1px solid var(--line-color, #dee2e6);
     padding: 0.5rem 0.75rem;
 }
-.hi-attr-picker-source-banner-logo {
+.hi-ref-picker-source-banner-logo {
     max-height: 24px;
     width: auto;
 }
-.hi-attr-picker-source-banner-label {
+.hi-ref-picker-source-banner-label {
     font-weight: 500;
 }
-.hi-attr-picker-source-banner-single .dropdown-toggle::after {
+.hi-ref-picker-source-banner-single .dropdown-toggle::after {
     display: none;
 }
-.hi-attr-picker-source-banner-single .dropdown-toggle:disabled {
+.hi-ref-picker-source-banner-single .dropdown-toggle:disabled {
     opacity: 1;
     cursor: default;
 }
-.hi-attr-picker-source-option img {
+.hi-ref-picker-source-option img {
     max-height: 20px;
     width: auto;
+}
+
+/* Hover-zoom for picker result thumbnails. Pure CSS: the wrapper
+   carries a hidden native-size sibling image; ``:hover`` reveals
+   it. ``pointer-events: none`` keeps the zoom from intercepting
+   clicks on the row text it overlaps. ``z-index`` puts it above
+   sibling rows but stays inside the modal body's scroll area;
+   tall rows near the bottom can clip. */
+.hi-ref-picker-thumb {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+}
+.hi-ref-picker-thumb-small {
+    display: block;
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+}
+.hi-ref-picker-thumb-zoom {
+    display: none;
+    position: absolute;
+    left: 64px;
+    top: 0;
+    max-width: 320px;
+    max-height: 320px;
+    background: #fff;
+    border: 1px solid #6c757d;
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.2);
+    z-index: 10;
+    pointer-events: none;
+}
+.hi-ref-picker-thumb:hover .hi-ref-picker-thumb-zoom {
+    display: block;
+}
+
+/* Second hover trigger: the source-URL link in the row's text area
+   also reveals the same zoom. ``:has()`` lets a sibling-of-thumb
+   trigger (the link is in a deeper subtree) bubble back up and
+   match the row, so a single zoom element serves both triggers. */
+.hi-ref-picker-row:has(.hi-ref-picker-source-link:hover)
+        .hi-ref-picker-thumb-zoom {
+    display: block;
 }
 

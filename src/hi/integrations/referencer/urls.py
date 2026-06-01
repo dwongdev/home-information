@@ -5,16 +5,16 @@ from . import views
 
 urlpatterns = [
     path( 'picker/',
-          views.AttributeReferencePickerView.as_view(),
-          name='integrations_attribute_reference_picker' ),
+          views.ExternalReferencePickerView.as_view(),
+          name='integrations_external_reference_picker' ),
 
     path( 'picker/search/',
-          views.AttributeReferenceSearchView.as_view(),
-          name='integrations_attribute_reference_search' ),
+          views.ExternalReferenceSearchView.as_view(),
+          name='integrations_external_reference_search' ),
 
     path( 'picker/attach/',
-          views.AttributeReferenceAttachView.as_view(),
-          name='integrations_attribute_reference_attach' ),
+          views.ExternalReferenceAttachView.as_view(),
+          name='integrations_external_reference_attach' ),
 
     path( 'home/',
           views.ReferenceHomeView.as_view(),
