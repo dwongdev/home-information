@@ -20,7 +20,7 @@ enter it.
 
 All integrations can be enabled and managed on the config page using the lower right **CONFIGURE**. Each integration type has their own configuration tab.
 
-<img src="img/getting-started/bottom-right-buttons-1024x768.png" alt="Configure button" width="400">
+<img src="img/getting-started/bottom-right-buttons-1024x768.png" alt="Configure button" width="55%">
 
 ## Connectors and Content Sources vs. Data Import
 
@@ -64,11 +64,11 @@ For a Content Source integration:
 3. Select the tab for the content source to configure
 4. Fill in the URL and credentials, then click **ENABLE**
 
-<img src="img/screenshots/content-sources-config-1024x768.png" alt="Content source config page" width="400">
+<img src="img/screenshots/content-sources-config-1024x768.png" alt="Content source config page" width="55%">
 
 Once enabled, you will see an extra **Link Content** button when you are editing items. Clicking that brings up a search dialog that searches the external source where you can select the content to link to the item. Once linked, when you open the item, that content will show up.
 
-<img src="img/screenshots/link-content-button-1024x768.png" alt="Link content button" width="300"> &nbsp; <img src="img/screenshots/reference-picker-1024x768.png" alt="Content picker dialog" width="300"> &nbsp; <img src="img/screenshots/link-content-tab-1024x768.png" alt="Linked content tab" width="300">
+<img src="img/screenshots/link-content-button-1024x768.png" alt="Link content button" width="32%"> &nbsp; <img src="img/screenshots/reference-picker-1024x768.png" alt="Content picker dialog" width="32%"> &nbsp; <img src="img/screenshots/link-content-tab-1024x768.png" alt="Linked content tab" width="32%">
 
 ### Data Import
 

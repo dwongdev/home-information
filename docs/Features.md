@@ -8,7 +8,7 @@ Home Information provides comprehensive tools for organizing, monitoring, and co
 
 **What it does:** Store, organize, and access all your home-related documents, notes, and data using a visual, location-based approach.
 
-<img src="img/screenshots/spatial-data-org-1024x768.png" alt="Kitchen Example" width="350"> &nbsp; <img src="img/screenshots/attribute-info-files-1024x768.png" alt="Info View/Edit Example" width="350">
+<img src="img/screenshots/spatial-data-org-1024x768.png" alt="Kitchen Example" width="45%"> &nbsp; <img src="img/screenshots/attribute-info-files-1024x768.png" alt="Info View/Edit Example" width="45%">
 
 ### Spatial Data Organization
 - **Position items visually** on floor plans or property maps
@@ -37,7 +37,7 @@ Home Information provides comprehensive tools for organizing, monitoring, and co
 - **Paperless-ngx** - Link documents and images to any items on your floor plan
 - **Immich** - Link images and videos to any items on your floor plan
 
-<img src="img/screenshots/reference-picker-1024x768.png" alt="Linking content" width="400">
+<img src="img/screenshots/reference-picker-1024x768.png" alt="Linking content" width="55%">
 
 ### HomeBox Inventory Integration
 - **Item synchronization** - automatically link items from HomeBox into your home layout
@@ -58,7 +58,7 @@ Home Information provides comprehensive tools for organizing, monitoring, and co
 
 **Real-world benefit:** Instead of opening a separate app and navigating device lists, you see device status right on your home map and control them in context with a single tap.
 
-<img src="img/screenshots/automation-view-1024x768.png" alt="Automation View Example" width="400">
+<img src="img/screenshots/automation-view-1024x768.png" alt="Automation View Example" width="55%">
 
 ### Event & Automation System
 - **Visual rule builder** - create automation rules using the spatial interface
@@ -91,7 +91,7 @@ Home Information provides comprehensive tools for organizing, monitoring, and co
 
 **Use case example:** Motion sensor triggers in the backyard. The system automatically shows you the backyard camera feed while logging the event and can send email alerts with relevant information.
 
-<img src="img/screenshots/security-view-active-1024x768.png" alt="Security View Example" width="400">
+<img src="img/screenshots/security-view-active-1024x768.png" alt="Security View Example" width="55%">
 
 ### Alert & Notification System
 - **Visual alerts** - on-screen notifications with color-coded severity
@@ -129,7 +129,7 @@ Home Information provides comprehensive tools for organizing, monitoring, and co
 
 **Perfect for:** Households that want a dedicated home management display, or anyone who prefers visual organization over list-based interfaces.
 
-<img src="img/screenshots/editing-view-1024x768.png" alt="Editing View Example" width="400">
+<img src="img/screenshots/editing-view-1024x768.png" alt="Editing View Example" width="55%">
 
 ## Integration & Extensibility
 
