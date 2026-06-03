@@ -3,8 +3,8 @@
 
 {% block interstitial_content %}
 <div>
-  <div class="display-4" style="font-size: clamp(2rem, 5vw, 3.5rem);">Welcome!</div>
-  <p class="lead mt-2 mb-4" style="font-size: clamp(1rem, 2.5vw, 1.25rem);">
+  <div class="display-4" style="font-size: clamp(2rem, 5vw, 5rem);">Welcome!</div>
+  <p class="lead mt-2 mb-4" style="font-size: clamp(1rem, 2.5vw, 2rem);">
     Choose your type of home to get started.
   </p>
   
@@ -13,7 +13,7 @@
     {% for profile_type in profile_type_list %}
     <form method="post" action="{% url 'profiles_initialize_predefined' profile_type %}"
           style="display: inline-block;"
-          data-async="true">
+          data-async="modal">
       {% csrf_token %}
       <button type="submit" class="profile-button">
         <img src="{% static 'img/profiles/'|add:profile_type.icon_filename %}" 

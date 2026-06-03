@@ -6,7 +6,7 @@
 
 Home Information transforms how you manage your property by creating a visual, spatial, centralized hub for everything about your home. Instead of hunting through drawers, email attachments, and scattered notes, you'll have manuals, maintenance records, device controls, and security monitoring all organized exactly where they belong - visually positioned on a map of your home.
 
-<img src="docs/img/screenshots/spatial-data-org-1024x768.png" alt="Kitchen Example" width="250"> &nbsp; <img src="docs/img/screenshots/security-view-active-closeup-400x300.png" alt="Security Example" width="250"> &nbsp; <img src="docs/img/screenshots/stream-browser-1024x768.png" alt="Camera Example" width="250">
+<img src="docs/img/screenshots/spatial-data-org-1024x768.png" alt="Kitchen Example" width="300"> &nbsp; <img src="docs/img/screenshots/security-view-active-1024x768.png" alt="Security Example" width="300"> &nbsp; <img src="docs/img/screenshots/stream-browser-1024x768.png" alt="Camera Example" width="300">
 
 ## Why Home Information?
 
@@ -45,6 +45,7 @@ The install script automatically handles everything: Docker setup verification, 
 - Upload and organize manuals, warranties, and documents by location
 - Store notes and specifications for every item in your home
 - Track maintenance histories and repair records
+- Link to information stored in other apps like [Paperless-ngx, HomeBox and Immich](docs/Integrations.md)
 
 **Visual Organization:**
 - Position items exactly where they belong on floor plans or property maps
@@ -54,10 +55,10 @@ The install script automatically handles everything: Docker setup verification, 
 **Home Automation Integration:**
 - Control lights, switches, and devices through [Home Assistant](docs/Integrations.md)
 - Monitor device states and histories
-- Set up automated alerts, rules and triggers
+- Set up automated alerting rules
 
 **Security & Monitoring:**
-- Integrate with [ZoneMinder](docs/Integrations.md) for camera management
+- Integrate with [Frigate or ZoneMinder](docs/Integrations.md) for camera management
 - Visual security zone monitoring with color-coded status
 - Email alerts and customizable alarm sounds
 - Browse video event histories
@@ -70,8 +71,9 @@ See the complete [Features List](docs/Features.md) for details.
 
 **What's Working:**
 - Full information management and visual organization
-- Home Assistant and ZoneMinder integrations
-- Security monitoring and alerts
+- Floor plan editor
+- Home Assistant, Frigate, Paperless-ngx, HomeBox, Immich and ZoneMinder integrations
+- Security modes, monitoring and alerts
 - Multi-location and multi-view support
 
 **What's Evolving:**
@@ -112,7 +114,7 @@ For technical details, see our [Development Documentation](docs/Development.md).
 - [Features](docs/Features.md) - Complete feature overview
 - [Getting Started](docs/GettingStarted.md) - First-time user walkthrough
 - [Layout Editor](docs/Editing.md) - Show how to use the layout editor
-- [Integrations](docs/Integrations.md) - Home Assistant and ZoneMinder setup
+- [Integrations](docs/Integrations.md) - Home Assistant, Frigate, Paperless-ngx, Immich, HomeBox and ZoneMinder setup
 - [Deployment Options](docs/Deployment.md) - Network access, custom compose stacks, production configuration
 - [FAQ](docs/FAQ.md) - Common questions and answers
 

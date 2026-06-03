@@ -27,6 +27,10 @@ after the import completes.
 You can re-run the same workflow later to bring in any new upstream
 items; existing imports are skipped by upstream identifier.
 
+<img src="img/screenshots/data-import-config-1024x768.png" alt="Data Import config page" width="350"> &nbsp; <img src="img/screenshots/data-import-modal-1024x768.png" alt="Data Import config dialog" width="350">
+
+<img src="img/screenshots/data-import-confirm-1024x768.png" alt="Data Import confirm dialog" width="300"> &nbsp; <img src="img/screenshots/data-import-result-1024x768.png" alt="Data Import result dialog" width="300"> &nbsp; <img src="img/screenshots/data-import-placement-1024x768.png" alt="Data Import placent dialog" width="300">
+
 ## Discarding imported data
 
 To remove imported items along with their custom data and attached
@@ -40,4 +44,4 @@ bring the items back you would need to re-import.
   HomeBox inventory into HI as locally-owned items, with custom
   fields and attached files preserved.
 
-More integrations will offer Data Import as the framework matures.
+More integrations will offer Data Import based on user feedback.
