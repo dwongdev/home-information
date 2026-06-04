@@ -4,6 +4,7 @@
 
 _High-level view of the applications change history.  See releases and commits for more fine-grained history._
 
+- v1.2.1 : June 3, 2026 : Installer falls back to a non-hidden `~/home-information` directory when Docker cannot read dot-directories (e.g. snap Docker); clearer startup warnings for malformed `HI_EXTRA_HOST_URLS` values; server environment-config hardening and test coverage; two-story profile background floor fix.
 - v1.2.0 : June 3, 2026 : New integrations (Frigate NVR, Immich, Paperless-ngx, HomeBox Connect/Import); Integration Capabilities, Entity-as-Reference, and External Reference (Linked Content) frameworks; EntityStatusPanel framework with per-EntityState merged history view; media thumbnail previews and video snapshot/live-feed improvements; Django 5.2 LTS upgrade; icon and state-panel normalization; Docker Compose management workflow; weather API simulators; plus assorted navigation, rendering, and query-performance fixes.
 - v1.1.5 : March 29, 2026 : HomeBox integration, entity archiving, soft-delete attributes, HA import allowlist filtering, new entity types (pool equipment, EV charger, energy storage, water treatment, etc.), integration logo display, dynamic entity sizing, security dependency updates, weather resilience improvements.
 - v1.1.4 : January 26, 2026 : Attribute ordering improvements, restore-to-default settings functionality, security updates including urllib3 CVE patch.
