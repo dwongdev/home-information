@@ -6,7 +6,7 @@
 
 Home Information transforms how you manage your property by creating a visual, spatial, centralized hub for everything about your home. Instead of hunting through drawers, email attachments, and scattered notes, you'll have manuals, maintenance records, device controls, and security monitoring all organized exactly where they belong - visually positioned on a map of your home.
 
-<img src="docs/img/screenshots/spatial-data-org-1024x768.png" alt="Kitchen Example" width="32%"> &nbsp; <img src="docs/img/screenshots/security-view-active-1024x768.png" alt="Security Example" width="32%"> &nbsp; <img src="docs/img/screenshots/stream-browser-1024x768.png" alt="Camera Example" width="32%">
+https://github.com/user-attachments/assets/e3d21511-f874-4d64-b089-c4751fc0de57
 
 ## Why Home Information?
 
@@ -64,6 +64,9 @@ The install script automatically handles everything: Docker setup verification, 
 - Browse video event histories
 
 See the complete [Features List](docs/Features.md) for details.
+
+## Screenshots
+<img src="docs/img/screenshots/spatial-data-org-1024x768.png" alt="Kitchen Example" width="32%"> &nbsp; <img src="docs/img/screenshots/security-view-active-1024x768.png" alt="Security Example" width="32%"> &nbsp; <img src="docs/img/screenshots/stream-browser-1024x768.png" alt="Camera Example" width="32%">
 
 ## Project Status
 
