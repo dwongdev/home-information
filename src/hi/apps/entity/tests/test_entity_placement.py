@@ -54,11 +54,11 @@ class TestEntityPlacerPersistence(BaseTestCase):
         location_view.svg_view_box = view_box
 
         placer = EntityPlacer()
-        # Compute the shape via the calculator, then persist directly
-        # (skipping place_entity_in_view to avoid delegate-pairing
+        # Compute the shape via a viewbox-bound calculator, then persist
+        # directly (skipping place_entity_in_view to avoid delegate-pairing
         # side effects that need a real EntityView).
-        placement_shape = placer.calculator.shape_for_entity(
-            entity=entity, location_view=location_view,
+        placement_shape = EntityPlacementCalculator(view_box=view_box).shape_for_entity(
+            entity=entity,
         )
         self.assertIsInstance(placement_shape, PlacementPoint)
         placer._persist_placement_shape(
@@ -107,37 +107,24 @@ class TestEntityPlacementCalculatorBulkShapes(BaseTestCase):
     The grid math itself is tested in test_position_geometry; this
     class verifies the calculator's entity-routing wrapper."""
 
-    def _make_location_view(self):
+    def _view_box(self):
         from hi.apps.common.svg_models import SvgViewBox
-        from hi.apps.location.models import Location
-
-        location = Location.objects.create(
-            name='Bulk Test Location',
-            svg_view_box_str='0 0 1000 1000',
-        )
-        location_view = Mock()
-        location_view.location = location
-        location_view.svg_view_box = SvgViewBox(x=0, y=0, width=1000, height=1000)
-        return location_view
+        return SvgViewBox(x=0, y=0, width=1000, height=1000)
 
     def test_empty_input_yields_empty_shapes(self):
-        calculator = EntityPlacementCalculator()
-        location_view = self._make_location_view()
+        calculator = EntityPlacementCalculator(view_box=self._view_box())
         self.assertEqual(
-            calculator.shapes_for_entities(entities=[], location_view=location_view),
+            calculator.shapes_for_entities(entities=[]),
             [],
         )
 
     def test_single_entity_falls_back_to_single_shape(self):
-        calculator = EntityPlacementCalculator()
-        location_view = self._make_location_view()
+        calculator = EntityPlacementCalculator(view_box=self._view_box())
         entity = Entity.objects.create(
             name='Single Camera',
             entity_type_str=str(EntityType.CAMERA),
         )
-        shapes = calculator.shapes_for_entities(
-            entities=[entity], location_view=location_view,
-        )
+        shapes = calculator.shapes_for_entities(entities=[entity])
         self.assertEqual(len(shapes), 1)
         self.assertIsInstance(shapes[0], PlacementPoint)
         # Centered on viewbox.
@@ -145,8 +132,7 @@ class TestEntityPlacementCalculatorBulkShapes(BaseTestCase):
         self.assertAlmostEqual(shapes[0].svg_y, 500.0)
 
     def test_multiple_icon_entities_each_get_a_grid_slot(self):
-        calculator = EntityPlacementCalculator()
-        location_view = self._make_location_view()
+        calculator = EntityPlacementCalculator(view_box=self._view_box())
         entities = [
             Entity.objects.create(
                 name=f'Cam {i}',
@@ -156,9 +142,7 @@ class TestEntityPlacementCalculatorBulkShapes(BaseTestCase):
             )
             for i in range(4)
         ]
-        shapes = calculator.shapes_for_entities(
-            entities=entities, location_view=location_view,
-        )
+        shapes = calculator.shapes_for_entities(entities=entities)
         self.assertEqual(len(shapes), len(entities))
         for shape in shapes:
             self.assertIsInstance(shape, PlacementPoint)
@@ -538,3 +522,51 @@ class TestPlacementInputBuilder(BaseTestCase):
             item_key_fn=self._key,
         )
         self.assertEqual(placement_input.heading, PLACEMENT_DEFAULT_HEADING)
+
+
+class TestPlacerCalculatorForOverride(BaseTestCase):
+    """The override path that lets placement follow the user's current
+    pan/zoom: the calculator is bound to the override viewbox when given,
+    else the LocationView's stored viewbox - the real LocationView is
+    never handed to the calculator (it is only the linkage target)."""
+
+    def test_no_override_uses_stored_view_box(self):
+        from hi.apps.common.svg_models import SvgViewBox
+        from hi.apps.location.tests.synthetic_data import LocationSyntheticData
+
+        location_view = LocationSyntheticData.create_test_location_view(
+            svg_view_box_str='0 0 800 600')
+        calculator = EntityPlacer._calculator_for(location_view)
+        self.assertEqual(
+            calculator.view_box.to_dict(),
+            SvgViewBox.from_attribute_value('0 0 800 600').to_dict(),
+        )
+
+    def test_override_takes_precedence_without_mutating_view(self):
+        from hi.apps.common.svg_models import SvgViewBox
+        from hi.apps.location.tests.synthetic_data import LocationSyntheticData
+
+        location_view = LocationSyntheticData.create_test_location_view(
+            svg_view_box_str='0 0 800 600')
+        override = SvgViewBox(x=100, y=50, width=200, height=150)
+
+        calculator = EntityPlacer._calculator_for(
+            location_view, svg_view_box_override=override)
+
+        self.assertEqual(calculator.view_box.to_dict(), override.to_dict())
+        # The real view (the linkage target) is untouched.
+        self.assertEqual(location_view.svg_view_box_str, '0 0 800 600')
+
+    def test_calculator_centers_shape_on_override_view_box(self):
+        from hi.apps.common.svg_models import SvgViewBox
+
+        override = SvgViewBox(x=100, y=50, width=200, height=150)
+        entity = Entity.objects.create(
+            name='Override Cam', entity_type_str=str(EntityType.CAMERA))
+
+        shape = EntityPlacementCalculator(view_box=override).shape_for_entity(
+            entity=entity)
+
+        # Centered on the override viewbox: 100 + 200/2 = 200, 50 + 150/2 = 125.
+        self.assertAlmostEqual(shape.svg_x, 200.0)
+        self.assertAlmostEqual(shape.svg_y, 125.0)

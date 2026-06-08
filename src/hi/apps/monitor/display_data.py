@@ -23,8 +23,10 @@ from hi.apps.console.console_converter_helper import (
 from hi.apps.entity.entity_state_role_order import ENTITY_STATUS_VIEW_ORDERING
 from hi.apps.entity.enums import EntityStateRole, EntityStateType, EntityStateValue
 from hi.apps.entity.models import Entity
+from hi.apps.sense.transient_models import SensorResponse
 
 from hi.hi_styles import StatusStyle
+from hi.units import UnitQuantity
 
 from .enums import EntityDisplayCategory
 from .status_data import EntityStateStatusData, EntityStatusData
@@ -113,6 +115,27 @@ class EntityStateDisplayData:
         self._controller_data_value = self._get_controller_data_value()
         return
 
+    @classmethod
+    def for_value( cls, entity_state, value ) -> 'EntityStateDisplayData':
+        """Build a display projection for a single discrete value (e.g. a
+        historical reading) so callers color it through the SAME status
+        dispatch as the live display, rather than re-deriving the status
+        token from the raw value. No time-decay is applied — a lone value
+        has no penultimate to decay from — so the result reflects the
+        value's own bucket/token (e.g. a TEMPERATURE reading's color band,
+        a BATTERY level's low/ok)."""
+        synthetic_response = SensorResponse(
+            integration_key = None,
+            value = None if value is None else str( value ),
+            timestamp = datetimeproxy.now(),
+        )
+        status_data = EntityStateStatusData(
+            entity_state = entity_state,
+            sensor_response_list = [ synthetic_response ],
+            controller_data_list = [],
+        )
+        return cls( status_data )
+
     def __getattr__( self, name ):
         # Fall through to the wrapped raw data for any accessor not
         # defined here (e.g. ``latest_sensor_response``, ``has_sensor``,
@@ -175,6 +198,18 @@ class EntityStateDisplayData:
     def latest_sensor_value(self):
         if self.sensor_response_list:
             return self.sensor_response_list[0].value
+        return None
+
+    @property
+    def latest_sensor_timestamp(self):
+        # Responses are deduplicated by value change upstream, so the
+        # latest response is the most recent *transition*. In the decay
+        # handlers this branch is only reached once the entity has left
+        # the value of interest, making this timestamp the moment that
+        # event ENDED — the correct anchor for the recent/past decay
+        # window (independent of how long the event lasted).
+        if self.sensor_response_list:
+            return self.sensor_response_list[0].timestamp
         return None
 
     @property
@@ -278,13 +313,7 @@ class EntityStateDisplayData:
         if len(self.sensor_response_list) > 1:
             return self.sensor_response_list[1].value
         return None
-    
-    @property
-    def penultimate_sensor_timestamp(self):
-        if len(self.sensor_response_list) > 1:
-            return self.sensor_response_list[1].timestamp
-        return None
-    
+
     def _get_controller_data_value(self):
         """Compute the controller-shaped value for this state.
 
@@ -358,6 +387,9 @@ class EntityStateDisplayData:
         if self.entity_state.entity_state_type == EntityStateType.BATTERY_LEVEL:
             return self._get_battery_level_status_style()
 
+        if self.entity_state.entity_state_type == EntityStateType.TEMPERATURE:
+            return self._get_temperature_status_style()
+
         # TODO: These should map the latest value into a continuous range of colors/opacity
         #
         # EntityStateType.AIR_PRESSURE
@@ -367,10 +399,12 @@ class EntityStateDisplayData:
         # EntityStateType.LIGHT_LEVEL
         # EntityStateType.MOISTURE
         # EntityStateType.SOUND_LEVEL
-        # EntityStateType.TEMPERATURE
         # EntityStateType.WATER_FLOW
         # EntityStateType.WIND_SPEED
 
+        return self._get_default_status_style()
+
+    def _get_default_status_style( self ):
         # Use the display-unit text so the polling refresh of the
         # status display matches what the initial server-side
         # template render produced (combined magnitude + unit
@@ -378,16 +412,15 @@ class EntityStateDisplayData:
         status_value = str( self.latest_display_value )
         if not status_value:
             status_value = StatusStyle.DEFAULT_STATUS_VALUE
-
         return StatusStyle.default( status_value = status_value )
-    
+
     def _get_movement_status_style( self ):
 
         if self.latest_sensor_value == str(EntityStateValue.ACTIVE):
             return StatusStyle.MovementActive
 
         if self.penultimate_sensor_value == str(EntityStateValue.ACTIVE):
-            movement_timedelta = datetimeproxy.now() - self.penultimate_sensor_timestamp
+            movement_timedelta = datetimeproxy.now() - self.latest_sensor_timestamp
             if movement_timedelta.total_seconds() < self.RECENT_MOVEMENT_THRESHOLD_SECS:
                 return StatusStyle.MovementRecent
 
@@ -402,7 +435,7 @@ class EntityStateDisplayData:
             return StatusStyle.MovementActive
 
         if self.penultimate_sensor_value == str(EntityStateValue.ACTIVE):
-            presence_timedelta = datetimeproxy.now() - self.penultimate_sensor_timestamp
+            presence_timedelta = datetimeproxy.now() - self.latest_sensor_timestamp
             if presence_timedelta.total_seconds() < self.RECENT_MOVEMENT_THRESHOLD_SECS:
                 return StatusStyle.MovementRecent
 
@@ -425,7 +458,7 @@ class EntityStateDisplayData:
 
         if ( self.penultimate_sensor_value
              and self.penultimate_sensor_value != object_none_value ):
-            object_timedelta = datetimeproxy.now() - self.penultimate_sensor_timestamp
+            object_timedelta = datetimeproxy.now() - self.latest_sensor_timestamp
             if object_timedelta.total_seconds() < self.RECENT_MOVEMENT_THRESHOLD_SECS:
                 return StatusStyle.MovementRecent
 
@@ -440,7 +473,7 @@ class EntityStateDisplayData:
             return StatusStyle.SmokeDetected
 
         if self.penultimate_sensor_value == str(EntityStateValue.SMOKE_DETECTED):
-            smoke_timedelta = datetimeproxy.now() - self.penultimate_sensor_timestamp
+            smoke_timedelta = datetimeproxy.now() - self.latest_sensor_timestamp
             if smoke_timedelta.total_seconds() < self.RECENT_SMOKE_THRESHOLD_SECS:
                 return StatusStyle.SmokeRecent
 
@@ -455,7 +488,7 @@ class EntityStateDisplayData:
             return StatusStyle.MoistureDetected
 
         if self.penultimate_sensor_value == str(EntityStateValue.MOISTURE_DETECTED):
-            moisture_timedelta = datetimeproxy.now() - self.penultimate_sensor_timestamp
+            moisture_timedelta = datetimeproxy.now() - self.latest_sensor_timestamp
             if moisture_timedelta.total_seconds() < self.RECENT_MOISTURE_THRESHOLD_SECS:
                 return StatusStyle.MoistureRecent
 
@@ -470,7 +503,7 @@ class EntityStateDisplayData:
             return StatusStyle.CoDetected
 
         if self.penultimate_sensor_value == str(EntityStateValue.CO_DETECTED):
-            co_timedelta = datetimeproxy.now() - self.penultimate_sensor_timestamp
+            co_timedelta = datetimeproxy.now() - self.latest_sensor_timestamp
             if co_timedelta.total_seconds() < self.RECENT_CO_THRESHOLD_SECS:
                 return StatusStyle.CoRecent
 
@@ -485,7 +518,7 @@ class EntityStateDisplayData:
             return StatusStyle.GasDetected
 
         if self.penultimate_sensor_value == str(EntityStateValue.GAS_DETECTED):
-            gas_timedelta = datetimeproxy.now() - self.penultimate_sensor_timestamp
+            gas_timedelta = datetimeproxy.now() - self.latest_sensor_timestamp
             if gas_timedelta.total_seconds() < self.RECENT_GAS_THRESHOLD_SECS:
                 return StatusStyle.GasRecent
 
@@ -528,7 +561,7 @@ class EntityStateDisplayData:
             return StatusStyle.Open
 
         if self.penultimate_sensor_value == str(EntityStateValue.OPEN):
-            open_timedelta = datetimeproxy.now() - self.penultimate_sensor_timestamp
+            open_timedelta = datetimeproxy.now() - self.latest_sensor_timestamp
             if open_timedelta.total_seconds() < self.RECENT_OPEN_THRESHOLD_SECS:
                 return StatusStyle.OpenRecent
 
@@ -567,7 +600,30 @@ class EntityStateDisplayData:
         if magnitude < self.BATTERY_LOW_THRESHOLD_PCT:
             return StatusStyle.BatteryLow
         return StatusStyle.BatteryOk
-    
+
+    def _get_temperature_status_style( self ):
+        # Bucket on the absolute temperature (cold -> pleasant -> hot).
+        # Normalize to the canonical °C first so the bucket thresholds are
+        # unit-agnostic regardless of whether this state is stored in °F,
+        # °C, etc. If the value or units can't be resolved, fall back to the
+        # plain numeric status display.
+        celsius = self._latest_temperature_celsius()
+        if celsius is None:
+            return self._get_default_status_style()
+        return StatusStyle.temperature( celsius )
+
+    def _latest_temperature_celsius( self ):
+        """The latest sensor value converted to canonical °C using the
+        EntityState's stored ``units``, or None when it can't be resolved
+        (no value, no/unknown units, non-numeric)."""
+        raw_value = self.latest_sensor_value
+        units = self.entity_state.units
+        if raw_value is None or not units:
+            return None
+        try:
+            return UnitQuantity( float( raw_value ), units ).to( 'degC' ).magnitude
+        except Exception:
+            return None
 
 
 @dataclass

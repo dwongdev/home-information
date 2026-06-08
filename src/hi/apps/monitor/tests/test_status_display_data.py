@@ -142,21 +142,24 @@ class TestEntityStateDisplayData(BaseTestCase):
         """Test MOVEMENT state returns MovementRecent for recently active state."""
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
-        
-        # Penultimate was active 60 seconds ago (within 90 second threshold)
-        recent_response = self._create_mock_sensor_response(
+
+        # Decay is anchored on when the event ENDED (the latest, post-event
+        # transition), not when it started. Movement ended (returned to idle)
+        # 60s ago — within the 90s recent window — even though it began long
+        # before that. Start-anchoring would mis-classify this as idle.
+        latest_response = self._create_mock_sensor_response(
             str(EntityStateValue.IDLE),
-            base_time
-        )
-        past_response = self._create_mock_sensor_response(
-            str(EntityStateValue.ACTIVE),
             base_time - timedelta(seconds=60)
         )
-        
-        status_data = self._create_entity_state_status_data('MOVEMENT', [recent_response, past_response])
-        
+        prior_response = self._create_mock_sensor_response(
+            str(EntityStateValue.ACTIVE),
+            base_time - timedelta(seconds=600)
+        )
+
+        status_data = self._create_entity_state_status_data('MOVEMENT', [latest_response, prior_response])
+
         display_data = EntityStateDisplayData(status_data)
-        
+
         self.assertEqual(display_data.svg_status_style, StatusStyle.MovementRecent)
 
     @patch('hi.apps.common.datetimeproxy.now')
@@ -164,21 +167,23 @@ class TestEntityStateDisplayData(BaseTestCase):
         """Test MOVEMENT state returns MovementPast for past active state."""
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
-        
-        # Penultimate was active 120 seconds ago (between 90-180 second threshold)
-        recent_response = self._create_mock_sensor_response(
+
+        # Movement ended 120s ago (between the 90s recent and 180s past
+        # thresholds); it began long before. Start-anchoring would call
+        # this idle.
+        latest_response = self._create_mock_sensor_response(
             str(EntityStateValue.IDLE),
-            base_time
-        )
-        past_response = self._create_mock_sensor_response(
-            str(EntityStateValue.ACTIVE),
             base_time - timedelta(seconds=120)
         )
-        
-        status_data = self._create_entity_state_status_data('MOVEMENT', [recent_response, past_response])
-        
+        prior_response = self._create_mock_sensor_response(
+            str(EntityStateValue.ACTIVE),
+            base_time - timedelta(seconds=600)
+        )
+
+        status_data = self._create_entity_state_status_data('MOVEMENT', [latest_response, prior_response])
+
         display_data = EntityStateDisplayData(status_data)
-        
+
         self.assertEqual(display_data.svg_status_style, StatusStyle.MovementPast)
 
     @patch('hi.apps.common.datetimeproxy.now')
@@ -186,21 +191,22 @@ class TestEntityStateDisplayData(BaseTestCase):
         """Test MOVEMENT state returns MovementIdle beyond all thresholds."""
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
-        
-        # Penultimate was active 200 seconds ago (beyond 180 second threshold)
-        recent_response = self._create_mock_sensor_response(
+
+        # Movement ended 200s ago — beyond the 180s past threshold — so the
+        # decay has fully elapsed and it reads idle again.
+        latest_response = self._create_mock_sensor_response(
             str(EntityStateValue.IDLE),
-            base_time
-        )
-        past_response = self._create_mock_sensor_response(
-            str(EntityStateValue.ACTIVE),
             base_time - timedelta(seconds=200)
         )
-        
-        status_data = self._create_entity_state_status_data('MOVEMENT', [recent_response, past_response])
-        
+        prior_response = self._create_mock_sensor_response(
+            str(EntityStateValue.ACTIVE),
+            base_time - timedelta(seconds=600)
+        )
+
+        status_data = self._create_entity_state_status_data('MOVEMENT', [latest_response, prior_response])
+
         display_data = EntityStateDisplayData(status_data)
-        
+
         self.assertEqual(display_data.svg_status_style, StatusStyle.MovementIdle)
 
     # SMOKE State Type Tests with Time Thresholds
@@ -224,21 +230,23 @@ class TestEntityStateDisplayData(BaseTestCase):
 
     @patch('hi.apps.common.datetimeproxy.now')
     def test_smoke_state_recent_within_threshold(self, mock_now):
-        # Penultimate detected 5 minutes ago (within the 10-minute
-        # RECENT threshold); current is clear.
+        # Smoke cleared 5 minutes ago (within the 10-minute RECENT
+        # threshold), having been detected long before. Decay anchors on
+        # the clear (event end), so start-anchoring would call this clear.
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
 
-        recent_response = self._create_mock_sensor_response(
-            str(EntityStateValue.SMOKE_CLEAR), base_time,
-        )
-        past_response = self._create_mock_sensor_response(
-            str(EntityStateValue.SMOKE_DETECTED),
+        latest_response = self._create_mock_sensor_response(
+            str(EntityStateValue.SMOKE_CLEAR),
             base_time - timedelta(seconds=300),
+        )
+        prior_response = self._create_mock_sensor_response(
+            str(EntityStateValue.SMOKE_DETECTED),
+            base_time - timedelta(seconds=5400),
         )
 
         status_data = self._create_entity_state_status_data(
-            'SMOKE', [recent_response, past_response],
+            'SMOKE', [latest_response, prior_response],
         )
 
         display_data = EntityStateDisplayData(status_data)
@@ -247,21 +255,22 @@ class TestEntityStateDisplayData(BaseTestCase):
 
     @patch('hi.apps.common.datetimeproxy.now')
     def test_smoke_state_past_beyond_recent_within_past(self, mock_now):
-        # Penultimate detected 20 minutes ago (between RECENT 10
-        # min and PAST 30 min thresholds).
+        # Smoke cleared 20 minutes ago (between the RECENT 10-min and PAST
+        # 30-min thresholds), having been detected long before.
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
 
-        recent_response = self._create_mock_sensor_response(
-            str(EntityStateValue.SMOKE_CLEAR), base_time,
-        )
-        past_response = self._create_mock_sensor_response(
-            str(EntityStateValue.SMOKE_DETECTED),
+        latest_response = self._create_mock_sensor_response(
+            str(EntityStateValue.SMOKE_CLEAR),
             base_time - timedelta(seconds=1200),
+        )
+        prior_response = self._create_mock_sensor_response(
+            str(EntityStateValue.SMOKE_DETECTED),
+            base_time - timedelta(seconds=5400),
         )
 
         status_data = self._create_entity_state_status_data(
-            'SMOKE', [recent_response, past_response],
+            'SMOKE', [latest_response, prior_response],
         )
 
         display_data = EntityStateDisplayData(status_data)
@@ -270,20 +279,22 @@ class TestEntityStateDisplayData(BaseTestCase):
 
     @patch('hi.apps.common.datetimeproxy.now')
     def test_smoke_state_clear_after_past_threshold(self, mock_now):
-        # Penultimate detected 1 hour ago (beyond PAST 30 min).
+        # Smoke cleared 40 minutes ago — beyond the PAST 30-min threshold —
+        # so the decay has fully elapsed and it reads clear.
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
 
-        recent_response = self._create_mock_sensor_response(
-            str(EntityStateValue.SMOKE_CLEAR), base_time,
+        latest_response = self._create_mock_sensor_response(
+            str(EntityStateValue.SMOKE_CLEAR),
+            base_time - timedelta(seconds=2400),
         )
-        past_response = self._create_mock_sensor_response(
+        prior_response = self._create_mock_sensor_response(
             str(EntityStateValue.SMOKE_DETECTED),
-            base_time - timedelta(seconds=3600),
+            base_time - timedelta(seconds=5400),
         )
 
         status_data = self._create_entity_state_status_data(
-            'SMOKE', [recent_response, past_response],
+            'SMOKE', [latest_response, prior_response],
         )
 
         display_data = EntityStateDisplayData(status_data)
@@ -352,17 +363,18 @@ class TestEntityStateDisplayData(BaseTestCase):
     def test_object_presence_recent_within_threshold(self, mock_now):
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
-        # Penultimate detected a class 60s ago (within RECENT 90s);
-        # current is NONE.
-        recent_response = self._create_mock_sensor_response(
-            str(EntityStateValue.OBJECT_NONE), base_time,
-        )
-        past_response = self._create_mock_sensor_response(
-            str(EntityStateValue.OBJECT_ANIMAL),
+        # Detection cleared (returned to NONE) 60s ago (within RECENT 90s),
+        # having begun long before. Start-anchoring would call this idle.
+        latest_response = self._create_mock_sensor_response(
+            str(EntityStateValue.OBJECT_NONE),
             base_time - timedelta(seconds=60),
         )
+        prior_response = self._create_mock_sensor_response(
+            str(EntityStateValue.OBJECT_ANIMAL),
+            base_time - timedelta(seconds=600),
+        )
         status_data = self._create_entity_state_status_data(
-            'OBJECT_PRESENCE', [recent_response, past_response],
+            'OBJECT_PRESENCE', [latest_response, prior_response],
         )
         display_data = EntityStateDisplayData(status_data)
         self.assertEqual(display_data.svg_status_style, StatusStyle.MovementRecent)
@@ -371,16 +383,18 @@ class TestEntityStateDisplayData(BaseTestCase):
     def test_object_presence_past_within_threshold(self, mock_now):
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
-        # Penultimate detected a class 120s ago (between 90s and 180s).
-        recent_response = self._create_mock_sensor_response(
-            str(EntityStateValue.OBJECT_NONE), base_time,
-        )
-        past_response = self._create_mock_sensor_response(
-            str(EntityStateValue.OBJECT_CAR),
+        # Detection cleared 120s ago (between the 90s and 180s thresholds),
+        # having begun long before.
+        latest_response = self._create_mock_sensor_response(
+            str(EntityStateValue.OBJECT_NONE),
             base_time - timedelta(seconds=120),
         )
+        prior_response = self._create_mock_sensor_response(
+            str(EntityStateValue.OBJECT_CAR),
+            base_time - timedelta(seconds=600),
+        )
         status_data = self._create_entity_state_status_data(
-            'OBJECT_PRESENCE', [recent_response, past_response],
+            'OBJECT_PRESENCE', [latest_response, prior_response],
         )
         display_data = EntityStateDisplayData(status_data)
         self.assertEqual(display_data.svg_status_style, StatusStyle.MovementPast)
@@ -389,16 +403,18 @@ class TestEntityStateDisplayData(BaseTestCase):
     def test_object_presence_idle_beyond_threshold(self, mock_now):
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
-        # Penultimate detected a class 200s ago (beyond PAST 180s).
-        recent_response = self._create_mock_sensor_response(
-            str(EntityStateValue.OBJECT_NONE), base_time,
-        )
-        past_response = self._create_mock_sensor_response(
-            str(EntityStateValue.OBJECT_PACKAGE),
+        # Detection cleared 200s ago — beyond the PAST 180s threshold — so
+        # the decay has fully elapsed and it reads idle.
+        latest_response = self._create_mock_sensor_response(
+            str(EntityStateValue.OBJECT_NONE),
             base_time - timedelta(seconds=200),
         )
+        prior_response = self._create_mock_sensor_response(
+            str(EntityStateValue.OBJECT_PACKAGE),
+            base_time - timedelta(seconds=600),
+        )
         status_data = self._create_entity_state_status_data(
-            'OBJECT_PRESENCE', [recent_response, past_response],
+            'OBJECT_PRESENCE', [latest_response, prior_response],
         )
         display_data = EntityStateDisplayData(status_data)
         self.assertEqual(display_data.svg_status_style, StatusStyle.MovementIdle)
@@ -422,21 +438,23 @@ class TestEntityStateDisplayData(BaseTestCase):
         """Test OPEN_CLOSE state returns OpenRecent for recently open state."""
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
-        
-        # Was open 60 seconds ago (within 90 second threshold)
-        recent_response = self._create_mock_sensor_response(
+
+        # Closed 60 seconds ago (within the 90s recent window) after having
+        # been open for a long time. Decay anchors on the close (event end),
+        # so a long open no longer suppresses the "recently open" cue.
+        latest_response = self._create_mock_sensor_response(
             str(EntityStateValue.CLOSED),
-            base_time
-        )
-        past_response = self._create_mock_sensor_response(
-            str(EntityStateValue.OPEN),
             base_time - timedelta(seconds=60)
         )
-        
-        status_data = self._create_entity_state_status_data('OPEN_CLOSE', [recent_response, past_response])
-        
+        prior_response = self._create_mock_sensor_response(
+            str(EntityStateValue.OPEN),
+            base_time - timedelta(seconds=600)
+        )
+
+        status_data = self._create_entity_state_status_data('OPEN_CLOSE', [latest_response, prior_response])
+
         display_data = EntityStateDisplayData(status_data)
-        
+
         self.assertEqual(display_data.svg_status_style, StatusStyle.OpenRecent)
 
     @patch('hi.apps.common.datetimeproxy.now')
@@ -444,21 +462,22 @@ class TestEntityStateDisplayData(BaseTestCase):
         """Test OPEN_CLOSE state returns OpenPast for past open state."""
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
-        
-        # Was open 120 seconds ago (between 90-180 second threshold)
-        recent_response = self._create_mock_sensor_response(
+
+        # Closed 120 seconds ago (between the 90s and 180s thresholds) after
+        # having been open for a long time.
+        latest_response = self._create_mock_sensor_response(
             str(EntityStateValue.CLOSED),
-            base_time
-        )
-        past_response = self._create_mock_sensor_response(
-            str(EntityStateValue.OPEN),
             base_time - timedelta(seconds=120)
         )
-        
-        status_data = self._create_entity_state_status_data('OPEN_CLOSE', [recent_response, past_response])
-        
+        prior_response = self._create_mock_sensor_response(
+            str(EntityStateValue.OPEN),
+            base_time - timedelta(seconds=600)
+        )
+
+        status_data = self._create_entity_state_status_data('OPEN_CLOSE', [latest_response, prior_response])
+
         display_data = EntityStateDisplayData(status_data)
-        
+
         self.assertEqual(display_data.svg_status_style, StatusStyle.OpenPast)
 
     @patch('hi.apps.common.datetimeproxy.now')
@@ -466,21 +485,22 @@ class TestEntityStateDisplayData(BaseTestCase):
         """Test OPEN_CLOSE state returns Closed beyond all thresholds."""
         base_time = datetime(2023, 1, 1, 12, 0, 0)
         mock_now.return_value = base_time
-        
-        # Was open 200 seconds ago (beyond 180 second threshold)
-        recent_response = self._create_mock_sensor_response(
+
+        # Closed 200 seconds ago — beyond the 180s past threshold — so the
+        # decay has fully elapsed and it reads closed.
+        latest_response = self._create_mock_sensor_response(
             str(EntityStateValue.CLOSED),
-            base_time
-        )
-        past_response = self._create_mock_sensor_response(
-            str(EntityStateValue.OPEN),
             base_time - timedelta(seconds=200)
         )
-        
-        status_data = self._create_entity_state_status_data('OPEN_CLOSE', [recent_response, past_response])
-        
+        prior_response = self._create_mock_sensor_response(
+            str(EntityStateValue.OPEN),
+            base_time - timedelta(seconds=600)
+        )
+
+        status_data = self._create_entity_state_status_data('OPEN_CLOSE', [latest_response, prior_response])
+
         display_data = EntityStateDisplayData(status_data)
-        
+
         self.assertEqual(display_data.svg_status_style, StatusStyle.Closed)
 
     # OPEN_CLOSE_POSITION State Type Tests (continuous-position cover)
@@ -617,7 +637,7 @@ class TestEntityStateDisplayData(BaseTestCase):
     def test_unmapped_entity_type_returns_default_style(self):
         """Test unmapped entity types return default style with sensor value."""
         sensor_response = self._create_mock_sensor_response('25.5')
-        status_data = self._create_entity_state_status_data('TEMPERATURE', [sensor_response])
+        status_data = self._create_entity_state_status_data('HUMIDITY', [sensor_response])
         
         with patch.object(StatusStyle, 'default') as mock_default:
             expected_style = Mock()
@@ -638,7 +658,6 @@ class TestEntityStateDisplayData(BaseTestCase):
         # Should return idle since no penultimate active state
         self.assertEqual(display_data.svg_status_style, StatusStyle.MovementIdle)
         self.assertIsNone(display_data.penultimate_sensor_value)
-        self.assertIsNone(display_data.penultimate_sensor_timestamp)
 
     # Property Access Tests
     
@@ -1032,3 +1051,70 @@ class TestToPollingUpdateDict(BaseTestCase):
         self.assertNotIn( 'status', row )
         self.assertNotIn( 'svg_style', row )
         self.assertIn( 'display', row )
+
+
+class TestTemperatureStatusStyle(BaseTestCase):
+    """TEMPERATURE buckets the absolute reading onto a cold→pleasant→hot
+    color ramp. The reading is normalized to canonical °C first, so the
+    bucket thresholds hold regardless of the EntityState's stored units;
+    an unresolvable reading (no/unknown units, non-numeric) falls back to
+    the plain numeric status display."""
+
+    def setUp(self):
+        super().setUp()
+        self.entity = Entity.objects.create(
+            name = 'Test Entity',
+            entity_type_str = 'SENSOR',
+        )
+
+    def _make_display_data(self, value, units):
+        entity_state = EntityState.objects.create(
+            entity = self.entity,
+            entity_state_type_str = 'TEMPERATURE',
+            units = units,
+        )
+        response = Mock(spec=SensorResponse)
+        response.value = value
+        response.timestamp = datetime.now()
+        status_data = EntityStateStatusData(
+            entity_state = entity_state,
+            sensor_response_list = [ response ],
+            controller_data_list = [],
+        )
+        return EntityStateDisplayData( status_data )
+
+    def test_fahrenheit_buckets_span_cold_to_hot(self):
+        # °F readings normalize to °C before bucketing; comfortable room
+        # temperatures (68-75°F) land in the green "pleasant" band while
+        # only outdoor extremes reach the blue/red ends.
+        cases = [
+            ( '10', StatusStyle.TemperatureCold ),
+            ( '45', StatusStyle.TemperatureCool ),
+            ( '70', StatusStyle.TemperaturePleasant ),
+            ( '85', StatusStyle.TemperatureWarm ),
+            ( '95', StatusStyle.TemperatureHot ),
+        ]
+        for value, expected_style in cases:
+            with self.subTest( fahrenheit = value ):
+                display_data = self._make_display_data( value, '°F' )
+                self.assertEqual( display_data.svg_status_style, expected_style )
+
+    def test_celsius_uses_same_thresholds(self):
+        # The same canonical-°C thresholds apply when the state is
+        # already stored in °C (no indoor/outdoor distinction needed).
+        display_data = self._make_display_data( '21', '°C' )
+        self.assertEqual(
+            display_data.svg_status_style, StatusStyle.TemperaturePleasant,
+        )
+
+    def test_missing_units_falls_back_to_default_style(self):
+        # Without units the reading can't be placed on the scale, so the
+        # plain numeric status display is used (status == the value text).
+        display_data = self._make_display_data( '21', None )
+        self.assertEqual( display_data.svg_status_style.status_value, '21' )
+
+    def test_non_numeric_value_falls_back_to_default_style(self):
+        display_data = self._make_display_data( 'unavailable', '°F' )
+        self.assertEqual(
+            display_data.svg_status_style.status_value, 'unavailable',
+        )

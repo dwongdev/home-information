@@ -11,10 +11,14 @@
         //
         DEBUG: window.HiClientConfig?.DEBUG ?? false,
         isEditMode: window.HiClientConfig?.IS_EDIT_MODE ?? false,
+        svgSnapGridPixels: window.HiClientConfig?.SVG_SNAP_GRID_PIXELS ?? 5,
 
         // Server-provided URLs (via ClientConfig context processor)
         API_STATUS_URL: window.HiClientConfig?.API_STATUS_URL ?? '/api/status',
         CONSOLE_UNLOCK_URL: window.HiClientConfig?.CONSOLE_UNLOCK_URL ?? '/console/unlock',
+
+        // Status polling cadence (ms), user-configurable via ConsoleSetting.
+        API_STATUS_POLLING_INTERVAL_MS: window.HiClientConfig?.API_STATUS_POLLING_INTERVAL_MS ?? 3000,
 
         MAIN_AREA_SELECTOR: '#hi-main-content',
         LOCATION_VIEW_AREA_SELECTOR: '#hi-location-view-main',
@@ -37,7 +41,8 @@
         API_LOCATION_ITEM_EDIT_MODE_URL: '/location/edit/item/edit-mode',
         API_LOCATION_ITEM_STATUS_URL: '/location/item/status',
         ENTITY_STATE_VALUE_CHOICES_URL_PREFIX: '/edit/entity/state/values',
-        
+        API_SET_SNAP_GRID_URL: '/snap-grid',
+
         generateUniqueId: function() {
             return _generateUniqueId();
         },
@@ -220,6 +225,30 @@
     };
     
     window.Hi = Hi;
+
+    // Snap-grid preference. Owned here (rather than duplicated in each SVG
+    // editor) so there is a single implementation. Seed the live edit value
+    // from the server-delivered preference (Hi.svgSnapGridPixels), then own
+    // the change handler via one delegated binding keyed on a shared class -
+    // delegated so it survives async re-renders of the editor chrome and
+    // works on whichever editor page is shown.
+    window.Hi.SvgEdit = window.Hi.SvgEdit || {};
+    window.Hi.SvgEdit.snapGridPixels = Hi.svgSnapGridPixels;
+
+    $(function() {
+        var snapSaveTimer = null;
+        $(document).on( 'input', '.hi-snap-grid', function() {
+            var value = parseInt( $( this ).val(), 10 ) || 0;
+            window.Hi.SvgEdit.snapGridPixels = value;  // live snapping
+            window.Hi.svgSnapGridPixels = value;       // keep the relay in sync
+            // Debounced persist so a spinner-arrow burst is one save.
+            clearTimeout( snapSaveTimer );
+            snapSaveTimer = setTimeout( function() {
+                AN.post( Hi.API_SET_SNAP_GRID_URL, { snap_grid_pixels: value },
+                         { suppressLoader: true } );
+            }, 400 );
+        });
+    });
 
     function _generateUniqueId() {
         return 'id-' + Date.now() + '-' + Math.floor(Math.random() * 1000);

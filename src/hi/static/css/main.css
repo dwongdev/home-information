@@ -71,6 +71,20 @@
   --on-status-bad-color: white;
   --on-status-idle-color: black;
 
+  /* Temperature ramp: blue (cold) -> green (pleasant) -> orange/red (hot).
+     These should match those in hi.hi_styles.StatusStyle (STATUS_TEMP_*). */
+  --status-temp-cold-color: #2c7fb8;
+  --status-temp-cool-color: #74add1;
+  --status-temp-pleasant-color: #1a9850;
+  --status-temp-warm-color: #fdae61;
+  --status-temp-hot-color: #d73027;
+
+  --on-status-temp-cold-color: white;
+  --on-status-temp-cool-color: black;
+  --on-status-temp-pleasant-color: white;
+  --on-status-temp-warm-color: black;
+  --on-status-temp-hot-color: white;
+
   /* Panel size budgets. Soft enforcement: collection wrappers reference
      these via auto-fit/minmax for adaptive column counts; panels
      reference them when their content scales with the budget.
@@ -84,6 +98,29 @@
   --hi-panel-row-target-height: 80px;
   --hi-panel-row-max-height: 128px;
   --hi-panel-default-tile-min-size: 160px;
+
+  /* Ceiling for a video-pane image/clip's rendered height. Landscape
+     cameras stay well under this (so they fill width as before); portrait
+     cameras are clamped here and letterboxed via object-fit so they fit
+     on screen instead of overflowing to ~2x the height. The two named
+     tokens are the menu of sizes; --hi-video-max-height is the active one,
+     defaulting to standard and re-pointed to compact by .hi-video-compact. */
+  --hi-video-max-height-standard: 60vh;
+  --hi-video-max-height-compact: 40vh;
+  --hi-video-max-height: var(--hi-video-max-height-standard);
+
+  /* Ceiling for the hi_grid side panel width. Its content is designed for
+     a narrow column and looks sparse past this, so on wide screens the
+     side clamps here and MAIN reclaims the freed width. A no-op on
+     small/medium screens, where the Bootstrap col-3 (25%) is already
+     narrower than this. */
+  --hi-side-max-width: 375px;
+
+  /* Letterbox/backdrop fill behind a video that doesn't fill its container
+     (e.g. a portrait clip in a landscape pane). A very dark, lightly
+     teal-tinted neutral — softer than pure black and cohesive with
+     --primary-color (#177072) — so the frame recedes without being stark. */
+  --hi-video-letterbox-bg: #13201f;
 
 }
 
@@ -545,6 +582,10 @@ a.clickable-card:active {
 .hi-side {
     padding-left: 0;
     padding-right: 0;
+    /* Clamp to min(col-3 25%, --hi-side-max-width): the cap only engages
+       on wide screens; below it the 25% flex-basis governs unchanged.
+       Paired with .scrollable-column flex-grow so MAIN reclaims the gap. */
+    max-width: var(--hi-side-max-width);
 }
 #hi-side-content {
     height: calc(100vh - var(--top-buttons-height) - var(--bottom-buttons-height));
@@ -595,6 +636,11 @@ a.clickable-card:active {
     max-height: 100vh;
     padding-top: var(--top-buttons-height);
     padding-bottom: var(--bottom-buttons-height);
+    /* Grow past the col-9 75% to absorb the width freed when .hi-side is
+       clamped on wide screens; no free space exists below the clamp, so
+       this is a no-op there. */
+    flex-grow: 1;
+    max-width: none;
 }
 .fixed-column {
     overflow-y: auto;
@@ -934,6 +980,19 @@ g[status="past"] {
 g[status="off"] path.hi-state-bg  {
     fill: var(--status-off-color);
 }
+/* Base for every status-display chip. MUST precede the specific
+ * .hi-status-display[status="..."] rules below: they share its
+ * specificity (class + one attribute), so they only override it by
+ * source order. Previously this sat after on/off/dim and silently
+ * clobbered them. */
+.hi-status-display[status] {
+    color: var(--black);
+    background-color: var(--white);
+    border-color: var(--black);
+    border-style: solid;
+    border-width: 2px;
+    border-radius: 8px;
+}
 .hi-status-display[status="off"] {
     color: var(--on-status-off-color);
     background-color: var(--status-off-color);
@@ -943,6 +1002,34 @@ g[status="on"] {
 }
 g[status="on"] path.hi-state-bg {
     fill: var(--status-on-color);
+}
+/* Fan icons: spin the blades while "on" as a live state cue alongside the
+ * on-glow. We rotate the blade path(s) -- NOT the placed <g> wrapper, whose
+ * transform attribute carries the icon's position/scale (a CSS transform on
+ * it would override that and move the icon). transform-box: fill-box pivots
+ * relative to the path's own bounding box. */
+@keyframes hi-fan-spin {
+    to { transform: rotate( 360deg ); }
+}
+@media (prefers-reduced-motion: no-preference) {
+    /* Ceiling fan: blades are their own path. The top blade reaches higher
+     * than the bottom blades reach low, so the bbox center sits ~4% above
+     * the hub -- nudge the y origin down to match. Eyeball-tune the second
+     * value (try 52-56%) if it still wobbles. */
+    g[status="on"] path.hi-entity-ceiling-fan-blades {
+        transform-box: fill-box;
+        transform-origin: 50% 54%;
+        animation: hi-fan-spin 3s linear infinite;
+    }
+    /* Exhaust fan: blades, outer ring and center hub share one path, but the
+     * ring and hub are circular so only the blades read as moving. The
+     * dominant circular ring keeps the bbox centered on the true axis, so
+     * plain center works without a tuned offset. */
+    g[status="on"] path.hi-entity-exhaust-fan-lines {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: hi-fan-spin 3s linear infinite;
+    }
 }
 .hi-status-display[status="on"] {
     color: var(--on-status-on-color);
@@ -991,16 +1078,23 @@ g[status="co_detected"] {
 g[status="gas_detected"] {
     filter: drop-shadow(0 0 5px var(--status-bad-color));
 }
-
-
-.hi-status-display[status] {
-    color: var(--black);
-    background-color: var(--white);
-    border-color: var(--black);
-    border-style: solid;
-    border-width: 2px;
-    border-radius: 8px;
+g[status="temperature_cold"] {
+    filter: drop-shadow(0 0 5px var(--status-temp-cold-color));
 }
+g[status="temperature_cool"] {
+    filter: drop-shadow(0 0 5px var(--status-temp-cool-color));
+}
+g[status="temperature_pleasant"] {
+    filter: drop-shadow(0 0 5px var(--status-temp-pleasant-color));
+}
+g[status="temperature_warm"] {
+    filter: drop-shadow(0 0 5px var(--status-temp-warm-color));
+}
+g[status="temperature_hot"] {
+    filter: drop-shadow(0 0 5px var(--status-temp-hot-color));
+}
+
+
 .hi-status-display[status="active"] {
     color: var(--on-status-active-color);
     background-color: var(--status-active-color);
@@ -1038,6 +1132,7 @@ g[status="gas_detected"] {
     color: var(--on-status-bad-color);
     background-color: var(--status-bad-color);
 }
+.hi-status-display[status="ok"],
 .hi-status-display[status="high"] {
     color: var(--on-status-ok-color);
     background-color: var(--status-ok-color);
@@ -1077,6 +1172,38 @@ g[status="gas_detected"] {
 .hi-status-display[status="gas_detected"] {
     color: var(--on-status-bad-color);
     background-color: var(--status-bad-color);
+}
+.hi-status-display[status="object_person"],
+.hi-status-display[status="object_car"],
+.hi-status-display[status="object_animal"],
+.hi-status-display[status="object_package"],
+.hi-status-display[status="object_other"] {
+    color: var(--on-status-active-color);
+    background-color: var(--status-active-color);
+}
+.hi-status-display[status="object_none"] {
+    color: var(--on-status-ok-color);
+    background-color: var(--status-ok-color);
+}
+.hi-status-display[status="temperature_cold"] {
+    color: var(--on-status-temp-cold-color);
+    background-color: var(--status-temp-cold-color);
+}
+.hi-status-display[status="temperature_cool"] {
+    color: var(--on-status-temp-cool-color);
+    background-color: var(--status-temp-cool-color);
+}
+.hi-status-display[status="temperature_pleasant"] {
+    color: var(--on-status-temp-pleasant-color);
+    background-color: var(--status-temp-pleasant-color);
+}
+.hi-status-display[status="temperature_warm"] {
+    color: var(--on-status-temp-warm-color);
+    background-color: var(--status-temp-warm-color);
+}
+.hi-status-display[status="temperature_hot"] {
+    color: var(--on-status-temp-hot-color);
+    background-color: var(--status-temp-hot-color);
 }
 
 g[hover] {
