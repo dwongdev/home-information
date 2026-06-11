@@ -1554,6 +1554,429 @@ class HassOpeningSensorState( HassState ):
 
 
 # --------------------------------------------------------------------------
+# Command Line Sensor (free-form string output)
+# --------------------------------------------------------------------------
+#
+# HA's ``command_line`` integration creates a ``sensor.x`` whose state is
+# whatever string the configured shell command emits to stdout (trimmed).
+# Typical homelab uses: RAID health check via SSH (``OK`` / ``Degraded`` /
+# ``Failed``), WAN IP lookup (``checkip.amazonaws.com``), certificate
+# expiry days, disk-space percentage, etc.
+#
+# The simulator represents this as a single TEXT state — the operator
+# types whatever string the command would have produced. ``icon`` is
+# operator-configurable since the YAML allows it per-sensor (e.g.,
+# ``mdi:harddisk`` for RAID, ``mdi:ip-network`` for WAN address).
+
+
+@dataclass( frozen = True )
+class HassCommandLineSensorFields( SimEntityFields ):
+    """Free-form ``sensor.x`` whose state is whatever string the
+    operator types in the simulator UI — mirrors HA's
+    ``command_line`` sensor (state = command stdout). ``icon`` and
+    ``unit_of_measurement`` are pass-through to the emitted
+    attributes."""
+    icon                : str = 'mdi:console-line'
+    unit_of_measurement : str = ''
+
+
+@dataclass
+class HassCommandLineSensorState( HassState ):
+    sim_entity_fields  : HassCommandLineSensorFields
+    sim_state_type     : SimStateType                  = SimStateType.TEXT
+    sim_state_id       : str                           = 'output'
+    value              : str                           = 'OK'
+
+    @property
+    def name(self):
+        return f'{self.entity_name} Output'
+
+    @property
+    def entity_id(self):
+        return _sensor_entity_id( self.entity_name )
+
+    @property
+    def state(self):
+        # HA emits the command's stdout as the entity's state
+        # (string-typed). No coercion — pass through as-is.
+        return self.value
+
+    @property
+    def attributes(self) -> Dict[ str, str ]:
+        attrs = {
+            'friendly_name': self.entity_name,
+            'icon': self.sim_entity_fields.icon,
+        }
+        if self.sim_entity_fields.unit_of_measurement:
+            attrs[ 'unit_of_measurement' ] = self.sim_entity_fields.unit_of_measurement
+        return attrs
+
+
+# --------------------------------------------------------------------------
+# Printer (IPP)
+# --------------------------------------------------------------------------
+#
+# HA's IPP integration creates a primary ``sensor.<printer>`` for the
+# printer's overall state (HA wire vocabulary: ``idle`` / ``printing`` /
+# ``stopped``) plus per-cartridge ``sensor.<printer>_<color>`` percentage
+# sensors with ``unit_of_measurement='%'`` and no ``device_class``. Real
+# devices vary in cartridge count — mono lasers have just a black toner,
+# color lasers/inkjets have black + cyan + magenta + yellow. Modeled here
+# as two distinct entity types so the operator can exercise either shape.
+
+
+_PRINTER_STATE_CHOICES = [
+    ( 'idle'     , 'Idle' ),
+    ( 'printing' , 'Printing' ),
+    ( 'stopped'  , 'Stopped' ),
+]
+_PRINTER_STATE_OPTIONS = [ choice for choice, _label in _PRINTER_STATE_CHOICES ]
+
+
+def _printer_state_entity_id( name : str ) -> str:
+    return _sensor_entity_id( name )
+
+
+def _printer_cartridge_entity_id( name : str, color : str ) -> str:
+    # HA's IPP integration emits cartridge entity_ids with the
+    # ``_<color>_cartridge`` suffix (not just ``_<color>``). HI's
+    # converter groups by stripping these suffixes, so matching the
+    # wire format is required for the cartridges to fold into one
+    # HI Entity instead of importing as siblings.
+    return _sensor_entity_id( name, suffix = f'_{color}_cartridge' )
+
+
+def _printer_cartridge_attributes( entity_name : str, color : str ) -> dict:
+    """HA IPP cartridge attribute shape: ``%`` unit, ``measurement``
+    state class, plus the ``marker_*`` family that real printers report
+    (low_level / high_level thresholds and the cartridge type). Without
+    these, HI's import path can't distinguish a cartridge sensor from
+    any other generic percentage sensor."""
+    return {
+        'friendly_name'      : f'{entity_name} {color} cartridge',
+        'marker_high_level'  : 100,
+        'marker_low_level'   : 2,
+        'marker_type'        : 'toner-cartridge',
+        'state_class'        : 'measurement',
+        'unit_of_measurement': '%',
+    }
+
+
+@dataclass( frozen = True )
+class HassPrinterMonoFields( SimEntityFields ):
+    """A monochrome IPP printer (B&W laser). Two states: printer
+    status (``sensor.<printer>``) and a single black toner level
+    (``sensor.<printer>_black``, percentage)."""
+    pass
+
+
+@dataclass( frozen = True )
+class HassPrinterColorFields( SimEntityFields ):
+    """A 4-cartridge color IPP printer (color laser or inkjet). Status
+    state plus four 0-100% cartridge levels — black + cyan + magenta +
+    yellow — each as a separate ``sensor.<printer>_<color>`` entity."""
+    pass
+
+
+def _printer_status_attributes( entity_name : str ) -> dict:
+    """HA IPP primary state attribute shape: ``device_class=enum`` with
+    an ``options`` list of valid states. HI's converter routes this to
+    ``EntityStateType.DISCRETE`` via the explicit ENUM device_class
+    mapping (rather than the no-device-class fallback)."""
+    return {
+        'device_class' : 'enum',
+        'friendly_name': entity_name,
+        'icon'         : 'mdi:printer',
+        'options'      : list( _PRINTER_STATE_OPTIONS ),
+    }
+
+
+@dataclass
+class HassPrinterMonoStatusState( HassState ):
+    sim_entity_fields  : HassPrinterMonoFields
+    sim_state_type     : SimStateType                  = SimStateType.DISCRETE
+    sim_state_id       : str                           = 'state'
+    value              : str                           = 'idle'
+
+    @property
+    def name(self):
+        return f'{self.entity_name} State'
+
+    @property
+    def entity_id(self):
+        return _printer_state_entity_id( self.entity_name )
+
+    @property
+    def state(self):
+        return self.value
+
+    @property
+    def choices(self) -> List[ Tuple[ str, str ] ]:
+        return _PRINTER_STATE_CHOICES
+
+    @property
+    def attributes(self) -> Dict[ str, str ]:
+        return _printer_status_attributes( self.entity_name )
+
+
+@dataclass
+class HassPrinterMonoBlackState( HassState ):
+    sim_entity_fields  : HassPrinterMonoFields
+    sim_state_type     : SimStateType                  = SimStateType.CONTINUOUS
+    sim_state_id       : str                           = 'black'
+    value              : str                           = '85'
+
+    @property
+    def name(self):
+        return f'{self.entity_name} Black'
+
+    @property
+    def entity_id(self):
+        return _printer_cartridge_entity_id( self.entity_name, 'black' )
+
+    @property
+    def state(self):
+        return self.value
+
+    @property
+    def attributes(self) -> Dict[ str, str ]:
+        return _printer_cartridge_attributes( self.entity_name, 'black' )
+
+    @property
+    def min_value(self):
+        return 0
+
+    @property
+    def max_value(self):
+        return 100
+
+    @property
+    def display_unit(self) -> str:
+        return '%'
+
+
+@dataclass
+class HassPrinterColorStatusState( HassState ):
+    sim_entity_fields  : HassPrinterColorFields
+    sim_state_type     : SimStateType                  = SimStateType.DISCRETE
+    sim_state_id       : str                           = 'state'
+    value              : str                           = 'idle'
+
+    @property
+    def name(self):
+        return f'{self.entity_name} State'
+
+    @property
+    def entity_id(self):
+        return _printer_state_entity_id( self.entity_name )
+
+    @property
+    def state(self):
+        return self.value
+
+    @property
+    def choices(self) -> List[ Tuple[ str, str ] ]:
+        return _PRINTER_STATE_CHOICES
+
+    @property
+    def attributes(self) -> Dict[ str, str ]:
+        return _printer_status_attributes( self.entity_name )
+
+
+@dataclass
+class HassPrinterColorBlackState( HassState ):
+    sim_entity_fields  : HassPrinterColorFields
+    sim_state_type     : SimStateType                  = SimStateType.CONTINUOUS
+    sim_state_id       : str                           = 'black'
+    value              : str                           = '85'
+
+    @property
+    def name(self):
+        return f'{self.entity_name} Black'
+
+    @property
+    def entity_id(self):
+        return _printer_cartridge_entity_id( self.entity_name, 'black' )
+
+    @property
+    def state(self):
+        return self.value
+
+    @property
+    def attributes(self) -> Dict[ str, str ]:
+        return _printer_cartridge_attributes( self.entity_name, 'black' )
+
+    @property
+    def min_value(self):
+        return 0
+
+    @property
+    def max_value(self):
+        return 100
+
+    @property
+    def display_unit(self) -> str:
+        return '%'
+
+
+@dataclass
+class HassPrinterColorCyanState( HassState ):
+    sim_entity_fields  : HassPrinterColorFields
+    sim_state_type     : SimStateType                  = SimStateType.CONTINUOUS
+    sim_state_id       : str                           = 'cyan'
+    value              : str                           = '75'
+
+    @property
+    def name(self):
+        return f'{self.entity_name} Cyan'
+
+    @property
+    def entity_id(self):
+        return _printer_cartridge_entity_id( self.entity_name, 'cyan' )
+
+    @property
+    def state(self):
+        return self.value
+
+    @property
+    def attributes(self) -> Dict[ str, str ]:
+        return _printer_cartridge_attributes( self.entity_name, 'cyan' )
+
+    @property
+    def min_value(self):
+        return 0
+
+    @property
+    def max_value(self):
+        return 100
+
+    @property
+    def display_unit(self) -> str:
+        return '%'
+
+
+@dataclass
+class HassPrinterColorMagentaState( HassState ):
+    sim_entity_fields  : HassPrinterColorFields
+    sim_state_type     : SimStateType                  = SimStateType.CONTINUOUS
+    sim_state_id       : str                           = 'magenta'
+    value              : str                           = '60'
+
+    @property
+    def name(self):
+        return f'{self.entity_name} Magenta'
+
+    @property
+    def entity_id(self):
+        return _printer_cartridge_entity_id( self.entity_name, 'magenta' )
+
+    @property
+    def state(self):
+        return self.value
+
+    @property
+    def attributes(self) -> Dict[ str, str ]:
+        return _printer_cartridge_attributes( self.entity_name, 'magenta' )
+
+    @property
+    def min_value(self):
+        return 0
+
+    @property
+    def max_value(self):
+        return 100
+
+    @property
+    def display_unit(self) -> str:
+        return '%'
+
+
+@dataclass
+class HassPrinterColorYellowState( HassState ):
+    sim_entity_fields  : HassPrinterColorFields
+    sim_state_type     : SimStateType                  = SimStateType.CONTINUOUS
+    sim_state_id       : str                           = 'yellow'
+    value              : str                           = '40'
+
+    @property
+    def name(self):
+        return f'{self.entity_name} Yellow'
+
+    @property
+    def entity_id(self):
+        return _printer_cartridge_entity_id( self.entity_name, 'yellow' )
+
+    @property
+    def state(self):
+        return self.value
+
+    @property
+    def attributes(self) -> Dict[ str, str ]:
+        return _printer_cartridge_attributes( self.entity_name, 'yellow' )
+
+    @property
+    def min_value(self):
+        return 0
+
+    @property
+    def max_value(self):
+        return 100
+
+    @property
+    def display_unit(self) -> str:
+        return '%'
+
+
+# --------------------------------------------------------------------------
+# Ping (ICMP) connectivity sensor
+# --------------------------------------------------------------------------
+#
+# HA's Ping integration creates one ``binary_sensor.X`` per host with
+# ``device_class=connectivity``. ``'on'`` means the host is reachable,
+# ``'off'`` means unreachable (HA's connectivity convention). The
+# ``host`` field carries the IP/hostname being pinged, emitted as an
+# entity attribute so HI can surface it on the device tile. Common
+# homelab use: tracking up/down for servers, NAS, routers, APs.
+
+
+@dataclass( frozen = True )
+class HassPingFields( SimEntityFields ):
+    """A Ping (ICMP) connectivity sensor — single binary_sensor with
+    ``device_class=connectivity``. ``host`` is the target being
+    pinged (informational; emitted as the ``host`` attribute)."""
+    host : str = '192.168.1.1'
+
+
+@dataclass
+class HassPingState( HassState ):
+    sim_entity_fields  : HassPingFields
+    sim_state_type     : SimStateType                  = SimStateType.CONNECTIVITY
+    sim_state_id       : str                           = 'ping'
+    value              : str                           = 'on'
+
+    @property
+    def name(self):
+        return f'{self.entity_name} Ping'
+
+    @property
+    def entity_id(self):
+        return _binary_sensor_entity_id( self.entity_name )
+
+    @property
+    def state(self):
+        return 'on' if str_to_bool( self.value ) else 'off'
+
+    @property
+    def attributes(self) -> Dict[ str, str ]:
+        return {
+            'device_class': 'connectivity',
+            'friendly_name': self.entity_name,
+            'host': self.sim_entity_fields.host,
+            'icon': 'mdi:lan-connect',
+        }
+
+
+# --------------------------------------------------------------------------
 # Power meter (numeric ``sensor.x`` with ``device_class=power``)
 # --------------------------------------------------------------------------
 
@@ -3267,6 +3690,43 @@ HASS_SIM_ENTITY_DEFINITION_LIST = [
         sim_entity_fields_class = HassOpeningSensorFields,
         sim_state_class_list = [
             HassOpeningSensorState,
+        ],
+    ),
+    SimEntityDefinition(
+        class_label = 'Command Line Sensor',
+        sim_entity_type = SimEntityType.HEALTHCHECK,
+        sim_entity_fields_class = HassCommandLineSensorFields,
+        sim_state_class_list = [
+            HassCommandLineSensorState,
+        ],
+    ),
+    SimEntityDefinition(
+        class_label = 'Printer (IPP, Mono)',
+        sim_entity_type = SimEntityType.PRINTER,
+        sim_entity_fields_class = HassPrinterMonoFields,
+        sim_state_class_list = [
+            HassPrinterMonoStatusState,
+            HassPrinterMonoBlackState,
+        ],
+    ),
+    SimEntityDefinition(
+        class_label = 'Printer (IPP, Color)',
+        sim_entity_type = SimEntityType.PRINTER,
+        sim_entity_fields_class = HassPrinterColorFields,
+        sim_state_class_list = [
+            HassPrinterColorStatusState,
+            HassPrinterColorBlackState,
+            HassPrinterColorCyanState,
+            HassPrinterColorMagentaState,
+            HassPrinterColorYellowState,
+        ],
+    ),
+    SimEntityDefinition(
+        class_label = 'Ping (ICMP)',
+        sim_entity_type = SimEntityType.COMPUTER,
+        sim_entity_fields_class = HassPingFields,
+        sim_state_class_list = [
+            HassPingState,
         ],
     ),
     SimEntityDefinition(

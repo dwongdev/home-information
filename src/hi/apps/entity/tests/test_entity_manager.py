@@ -5,6 +5,7 @@ from hi.apps.entity.models import (
     Entity,
     EntityState,
     EntityStateDelegation,
+    EntityView,
 )
 from hi.apps.entity.enums import EntityGroupType, EntityStateType, EntityType
 from hi.apps.location.tests.synthetic_data import LocationSyntheticData
@@ -230,6 +231,19 @@ class TestCreateLocationEntityViewGroupListExcludeDelegates(BaseTestCase):
             for item in group.item_list
         }
 
+    def _picker_groups_and_delegates(self, location_view, unused_entity_ids=None):
+        """Bridges the current two-method picker API (type-grouped list +
+        delegate list). The query-optimization refactor will repoint this
+        single helper at the combined method without touching the test
+        bodies, so these tests double as a behavior-preserving net."""
+        if unused_entity_ids is None:
+            unused_entity_ids = set()
+        picker_data = EntityManager().create_location_entity_picker_data(
+            location_view=location_view,
+            unused_entity_ids=unused_entity_ids,
+        )
+        return picker_data.entity_view_group_list, picker_data.delegate_view_item_list
+
     def test_delegate_hidden_when_exclude_delegates_true(self):
         principal, delegate_area = self._make_principal_with_delegate()
         location_view = LocationSyntheticData.create_test_location_view()
@@ -274,5 +288,98 @@ class TestCreateLocationEntityViewGroupListExcludeDelegates(BaseTestCase):
 
         names = self._names_in_groups(group_list)
         self.assertIn(plain.name, names)
+
+    def test_delegate_view_item_list_contains_only_delegates(self):
+        # The "Paired Items" section is the complement of the excluded
+        # type-grouped list: just the delegates, neither the principal
+        # nor unrelated standalone entities.
+        principal, delegate_area = self._make_principal_with_delegate()
+        Entity.objects.create(
+            name='Standalone Light',
+            entity_type_str=str(EntityType.LIGHT),
+        )
+        location_view = LocationSyntheticData.create_test_location_view()
+
+        _, item_list = self._picker_groups_and_delegates(location_view)
+
+        names = { item.entity.name for item in item_list }
+        self.assertEqual(names, { delegate_area.name })
+
+    def _make_named_delegate(self, principal_name, delegate_name):
+        principal = Entity.objects.create(
+            name=principal_name,
+            entity_type_str=str(EntityType.MOTION_SENSOR),
+        )
+        state = EntityState.objects.create(
+            entity=principal,
+            entity_state_type_str=str(EntityStateType.MOVEMENT),
+            name='movement',
+        )
+        delegate = Entity.objects.create(
+            name=delegate_name,
+            entity_type_str=str(EntityType.AREA),
+        )
+        EntityStateDelegation.objects.create(
+            entity_state=state,
+            delegate_entity=delegate,
+        )
+        return delegate
+
+    def test_delegate_view_item_exists_in_view_flag(self):
+        # A delegate already placed in the view is flagged in-view so the
+        # picker renders it as a toggle-off; one not in the view is not.
+        delegate_area = self._make_named_delegate('Front Motion', 'Front Area')
+        other_delegate = self._make_named_delegate('Back Motion', 'Back Area')
+        location_view = LocationSyntheticData.create_test_location_view()
+        EntityView.objects.create(
+            entity=delegate_area,
+            location_view=location_view,
+        )
+
+        _, item_list = self._picker_groups_and_delegates(location_view)
+        exists_by_name = { item.entity.name: item.exists_in_view for item in item_list }
+
+        self.assertTrue(exists_by_name[delegate_area.name])
+        self.assertFalse(exists_by_name[other_delegate.name])
+
+    def test_delegate_partition_is_mutually_exclusive(self):
+        # A delegate appears only in the delegate list; a non-delegate
+        # (principal or standalone) appears only in the type-grouped
+        # list. The two halves never overlap.
+        principal, delegate_area = self._make_principal_with_delegate()
+        standalone = Entity.objects.create(
+            name='Standalone Light',
+            entity_type_str=str(EntityType.LIGHT),
+        )
+        location_view = LocationSyntheticData.create_test_location_view()
+
+        group_list, delegate_item_list = self._picker_groups_and_delegates(location_view)
+        group_names = self._names_in_groups(group_list)
+        delegate_names = { item.entity.name for item in delegate_item_list }
+
+        self.assertEqual(delegate_names, { delegate_area.name })
+        self.assertIn(principal.name, group_names)
+        self.assertIn(standalone.name, group_names)
+        self.assertNotIn(delegate_area.name, group_names)
+        self.assertNotIn(principal.name, delegate_names)
+        self.assertNotIn(standalone.name, delegate_names)
+
+    def test_is_unused_propagates_to_delegate_list(self):
+        # The delegate list carries the is_unused flag through from the
+        # caller-supplied set, same as the type-grouped list.
+        _, delegate_area = self._make_principal_with_delegate()
+        location_view = LocationSyntheticData.create_test_location_view()
+
+        _, delegate_item_list = self._picker_groups_and_delegates(
+            location_view, unused_entity_ids={ delegate_area.id },
+        )
+        item = next( i for i in delegate_item_list if i.entity == delegate_area )
+        self.assertTrue(item.is_unused)
+
+        _, delegate_item_list = self._picker_groups_and_delegates(
+            location_view, unused_entity_ids=set(),
+        )
+        item = next( i for i in delegate_item_list if i.entity == delegate_area )
+        self.assertFalse(item.is_unused)
 
 

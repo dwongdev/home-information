@@ -986,12 +986,20 @@ g[status="off"] path.hi-state-bg  {
  * source order. Previously this sat after on/off/dim and silently
  * clobbered them. */
 .hi-status-display[status] {
+    display: inline-block;
     color: var(--black);
     background-color: var(--white);
-    border-color: var(--black);
-    border-style: solid;
-    border-width: 2px;
-    border-radius: 8px;
+    border: 1px solid var(--black);
+    border-radius: 4px;
+    padding: 1px 8px;
+    font-size: 0.9em;
+    line-height: 1.4;
+    width: 10em;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-sizing: border-box;
 }
 .hi-status-display[status="off"] {
     color: var(--on-status-off-color);
@@ -1060,78 +1068,26 @@ g[status="connected"] {
 g[status="disconnected"] {
     filter: drop-shadow(0 0 5px var(--status-bad-color));
 }
-g[status="high"] {
-    filter: drop-shadow(0 0 5px var(--status-ok-color));
+g[status="degraded"] {
+    filter: drop-shadow(0 0 5px var(--status-recent-color));
 }
-g[status="low"] {
-    filter: drop-shadow(0 0 5px var(--status-bad-color));
-}
-g[status="smoke_detected"] {
-    filter: drop-shadow(0 0 5px var(--status-bad-color));
-}
-g[status="moisture_detected"] {
-    filter: drop-shadow(0 0 5px var(--status-bad-color));
-}
-g[status="co_detected"] {
-    filter: drop-shadow(0 0 5px var(--status-bad-color));
-}
-g[status="gas_detected"] {
-    filter: drop-shadow(0 0 5px var(--status-bad-color));
-}
-g[status="temperature_cold"] {
-    filter: drop-shadow(0 0 5px var(--status-temp-cold-color));
-}
-g[status="temperature_cool"] {
-    filter: drop-shadow(0 0 5px var(--status-temp-cool-color));
-}
-g[status="temperature_pleasant"] {
-    filter: drop-shadow(0 0 5px var(--status-temp-pleasant-color));
-}
-g[status="temperature_warm"] {
-    filter: drop-shadow(0 0 5px var(--status-temp-warm-color));
-}
-g[status="temperature_hot"] {
-    filter: drop-shadow(0 0 5px var(--status-temp-hot-color));
-}
-
-
-.hi-status-display[status="active"] {
-    color: var(--on-status-active-color);
-    background-color: var(--status-active-color);
-}
-.hi-status-display[status="idle"] {
-    color: var(--on-status-ok-color);
-    background-color: var(--status-ok-color);
-}
-.hi-status-display[status="recent"] {
-    color: var(--on-status-recent-color);
-    background-color: var(--status-recent-color);
-}
-.hi-status-display[status="past"] {
-    color: var(--on-status-past-color);
-    background-color: var(--status-past-color);
-}
-.hi-status-display[status="partial"] {
-    color: var(--on-status-recent-color);
-    background-color: var(--status-recent-color);
-}
-.hi-status-display[status="open"] {
-    color: var(--on-status-bad-color);
-    background-color: var(--status-bad-color);
-}
-.hi-status-display[status="closed"] {
-    color: var(--on-status-idle-color);
-    background-color: var(--status-idle-color);
-}
-.hi-status-display[status="RAID_OK"],
+.hi-status-display[status="raid_ok"],
 .hi-status-display[status="connected"] {
     color: var(--on-status-ok-color);
     background-color: var(--status-ok-color);
 }
+.hi-status-display[status="printing"],
+.hi-status-display[status="degraded"] {
+    color: var(--on-status-recent-color);
+    background-color: var(--status-recent-color);
+}
+.hi-status-display[status="stopped"],
+.hi-status-display[status="failed"],
 .hi-status-display[status="disconnected"] {
     color: var(--on-status-bad-color);
     background-color: var(--status-bad-color);
 }
+.hi-status-display[status="idle"],
 .hi-status-display[status="ok"],
 .hi-status-display[status="high"] {
     color: var(--on-status-ok-color);
@@ -2099,6 +2055,17 @@ g[hover] {
 .collection-tile-grid--small .entity-card--tile {
     min-height: var(--hi-panel-tile-small-min-size);
 }
+/* Sensor value chips inside the SMALL grid: the universal chip width
+ * (10em) overflows the narrower cells produced by
+ * --hi-panel-tile-small-min-size, so values truncate at the right edge.
+ * Scoping by the wrapper class keeps this shrinkage isolated — GRID,
+ * GRID_LARGE, LIST, and modal contexts continue to use the universal
+ * chip metrics defined in .hi-status-display[status]. */
+.collection-tile-grid--small .hi-status-display[status] {
+    width: 8em;
+    font-size: 0.8em;
+    padding: 1px 6px;
+}
 .collection-default {
     grid-template-columns: repeat(
         auto-fit, minmax(var(--hi-panel-default-tile-min-size), 1fr)
@@ -2169,6 +2136,12 @@ g[hover] {
      * visible below the panel content. */
     display: grid;
     min-height: var(--hi-panel-tile-min-size);
+    /* Override the default ``min-width: auto`` on grid items — without
+     * this, long content (entity names, status chips) expands the cell
+     * past its 1fr column width, then ``.entity-card { overflow: hidden }``
+     * clips raw on the right rather than letting children truncate with
+     * ellipsis. */
+    min-width: 0;
 }
 
 .entity-card--row {

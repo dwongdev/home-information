@@ -252,13 +252,14 @@ class CollectionManageItemsView( HiSideView ):
 
         collection = CollectionManager().get_default_collection( request = request )
         unused_entity_ids = EditViewHelpers.get_unused_entity_ids()
-        entity_collection_group_list = CollectionManager().create_entity_collection_group_list(
+        entity_picker_data = CollectionManager().create_collection_entity_picker_data(
             collection = collection,
             unused_entity_ids = unused_entity_ids,
-            exclude_delegates = True,
         )
         return {
-            'entity_collection_group_list': entity_collection_group_list,
+            'collection': collection,
+            'entity_collection_group_list': entity_picker_data.entity_collection_group_list,
+            'delegate_view_item_list': entity_picker_data.delegate_view_item_list,
         }
 
     

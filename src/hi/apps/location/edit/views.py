@@ -487,17 +487,17 @@ class LocationViewManageItemsView( HiSideView ):
 
         location_view = LocationManager().get_default_location_view( request = request )
         unused_entity_ids = EditViewHelpers.get_unused_entity_ids()
-        entity_view_group_list = EntityManager().create_location_entity_view_group_list(
+        entity_picker_data = EntityManager().create_location_entity_picker_data(
             location_view = location_view,
             unused_entity_ids = unused_entity_ids,
-            exclude_delegates = True,
         )
         collection_view_group = CollectionManager().create_location_collection_view_group(
             location_view = location_view,
         )
         return {
             'location_view': location_view,
-            'entity_view_group_list': entity_view_group_list,
+            'entity_view_group_list': entity_picker_data.entity_view_group_list,
+            'delegate_view_item_list': entity_picker_data.delegate_view_item_list,
             'collection_view_group': collection_view_group,
         }
 
