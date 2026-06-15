@@ -7,7 +7,7 @@ How to install Home Information and manage your installation day-to-day. For dep
 ## Prerequisites
 
 - **Docker** - installed and running ([Get Docker](https://docs.docker.com/get-docker/))
-- **Python 3.6+** - for secure credential generation (usually pre-installed)
+- **Python 3.11+** - for secure credential generation (usually pre-installed)
 
 ## Quick Installation
 

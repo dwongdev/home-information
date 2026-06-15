@@ -10,7 +10,7 @@
 
 ## Tech Stack
 
-- Django 4.2 (back-end)
+- Django 5.2 (back-end)
 - Javascript using jQuery 3.7 (front-end)
 - Bootstrap 4 (CSS)
 - SQLite (database)

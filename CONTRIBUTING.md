@@ -55,7 +55,7 @@ No contribution is too small! Even fixing typos or clarifying confusing document
 - Testing and CI/CD improvements
 
 **Tech stack:**
-- **Backend:** Django 4.2, Python 3.11+
+- **Backend:** Django 5.2+, Python 3.11+
 - **Frontend:** JavaScript (jQuery), Bootstrap 4, HTML/CSS
 - **Database:** SQLite
 - **Infrastructure:** Docker, Redis

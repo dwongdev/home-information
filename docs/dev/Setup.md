@@ -15,7 +15,7 @@ For a streamlined setup experience, we provide an automated setup script that ha
 After cloning your fork, run the setup script from the project root:
 ```bash
 cd home-information
-./deploy/dev-setup.sh
+./dev/dev-setup.sh
 ```
 
 This script will:
@@ -36,7 +36,7 @@ git clone https://github.com/${YOURUSERNAME}/home-information.git
 cd home-information
 make env-build-dev
 python3.11 -m venv venv
-. ./init-env-dev.sh
+. ./dev/init-env-dev.sh
 pip install -r src/hi/requirements/development.txt
 cd src
 ./manage.py check
@@ -119,7 +119,7 @@ python3.11 -m venv venv
 ```
 Now source the environment and virtual environment with this convenience script:
 ``` shell
-. ./init-env-dev.sh
+. ./dev/init-env-dev.sh
 ```
 In the future, just source'ing this script is all you need to set things up for development (virtual env and env vars).
 
@@ -163,7 +163,7 @@ Once your environment is set up, these are the common commands for daily develop
 ### Environment Activation
 ```bash
 # Daily development setup (run this first each day)
-. ./init-env-dev.sh  # Sources virtual env and environment variables
+. ./dev/init-env-dev.sh  # Sources virtual env and environment variables
 ```
 
 ### Django Management
